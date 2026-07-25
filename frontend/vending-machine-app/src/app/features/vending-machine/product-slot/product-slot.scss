@@ -1,49 +1,78 @@
 .slot {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.75rem 0.5rem;
-  min-height: 110px;
+  gap: 0.15rem;
+  padding: 0.5rem 0.4rem 0.6rem;
+  min-height: 150px;
   text-align: center;
-  background: #f7f7f5;
-  border: 1px solid #ccc;
-  border-radius: 8px;
+  background: linear-gradient(180deg, #fdfdfc 0%, #eceae6 100%);
+  border: 1px solid #c9c6c0;
+  border-radius: 6px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.6),
+    0 1px 3px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
 
   &.out-of-stock {
-    opacity: 0.55;
+    .slot__photo {
+      filter: grayscale(1);
+      opacity: 0.5;
+    }
+
+    .slot__code,
+    .slot__name,
+    .slot__price {
+      opacity: 0.5;
+    }
   }
 }
 
 .slot__status {
-  display: flex;
-  justify-content: flex-end;
-  width: 100%;
+  position: absolute;
+  top: 0.35rem;
+  right: 0.35rem;
+  z-index: 1;
 }
 
 .slot__light {
-  width: 10px;
-  height: 10px;
+  display: block;
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
-  background: #555;
+  background: #3a3a3a;
+  box-shadow: inset 0 0 2px rgba(0, 0, 0, 0.6);
 
   &.lit {
-    background: #e63946;
-    box-shadow: 0 0 6px #e63946;
+    background: #ff3b30;
+    box-shadow: 0 0 6px 2px rgba(255, 59, 48, 0.8);
   }
+}
+
+.slot__photo {
+  width: 100%;
+  height: 68px;
+  object-fit: cover;
+  border-radius: 4px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
 }
 
 .slot__code {
   font-family: 'Courier New', monospace;
   font-weight: 700;
+  font-size: 0.8rem;
   letter-spacing: 0.05em;
+  margin-top: 0.15rem;
 }
 
 .slot__name {
-  font-size: 0.85rem;
+  font-size: 0.72rem;
+  line-height: 1.15;
 }
 
 .slot__price {
-  font-size: 0.8rem;
-  color: #555;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #2f6d3a;
 }

@@ -6,6 +6,7 @@
       [attr.aria-label]="product().isOutOfStock ? 'Out of stock' : 'In stock'"
     ></span>
   </div>
+  <img class="slot__photo" [src]="imageUrl()" [alt]="product().name" />
   <div class="slot__code">{{ product().code }}</div>
   <div class="slot__name">{{ product().name }}</div>
   <div class="slot__price">{{ product().priceCents / 100 | currency }}</div>
