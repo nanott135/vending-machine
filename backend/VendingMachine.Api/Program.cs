@@ -1,3 +1,6 @@
+using Microsoft.EntityFrameworkCore;
+using VendingMachine.Api.Data;
+
 const string AngularDevCorsPolicy = "AngularDev";
 
 var builder = WebApplication.CreateBuilder(args);
@@ -5,6 +8,9 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
+builder.Services.AddDbContext<VendingMachineDbContext>(options =>
+    options.UseSqlServer(builder.Configuration.GetConnectionString("VendingMachineDb")));
 
 builder.Services.AddCors(options =>
 {

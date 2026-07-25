@@ -6,7 +6,7 @@ Building a greenfield vending machine simulator: Angular front end, ASP.NET Core
 
 Confirmed decisions from review:
 - **Full coin simulation**: user inserts real denominations (5c/10c/25c/$1); the machine keeps its own coin inventory and makes change from it on purchase (can decline a sale if it can't make exact change).
-- **DB**: local SQL Server / LocalDB via connection string (no Docker).
+- **DB**: local SQL Server via connection string (no Docker). This machine has a SQL Server Express named instance (`.\SQLEXPRESS`) running as a Windows service rather than the lightweight LocalDB runtime, so the connection string targets that instance.
 - **Products**: 12 products seeded via EF Core migration (no admin UI) — code, name, price, quantity, with a couple seeded at quantity 0 to demonstrate the out-of-stock light.
 
 One addition beyond the original ask, included because "full simulation" implies it: a **Return Coins** action, so a user who inserts money without buying isn't stuck. Flagging it here for visibility — easy to drop if unwanted.
