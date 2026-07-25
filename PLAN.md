@@ -56,7 +56,7 @@ Purchase flow (`IVendingMachineService.Purchase`):
 
 ### Testing
 - Backend: xUnit tests for `ChangeMakingService` (exact-change success, insufficient-inventory failure) and `VendingMachineService` (successful purchase, insufficient funds, out of stock, no-exact-change), using EF Core's InMemory provider for service tests.
-- Frontend: default Angular CLI Karma/Jasmine specs for `product-slot` (out-of-stock rendering) and `coin-slot` (balance display).
+- Frontend: default Angular CLI test runner (Vitest, the CLI 22 default - not Karma/Jasmine as originally noted) for `product-slot` (out-of-stock rendering) and `coin-slot` (balance display).
 
 ### Git workflow (per repo's `CLAUDE.md`)
 Working on feature branch `feat/vending-machine-simulator`, with incremental commits as logical pieces land (domain/migrations → services → controllers → frontend scaffold → components → wiring → tests), each shown for review before committing. PR opened at the end via `gh pr create --fill` (once a remote exists — will confirm before that step since there's no remote configured yet).
