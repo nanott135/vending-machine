@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="VendingMachine.Api.Tests/VendingMachine.Api.Tests.csproj" />
+  <Project Path="VendingMachine.Api/VendingMachine.Api.csproj" />
+</Solution>
