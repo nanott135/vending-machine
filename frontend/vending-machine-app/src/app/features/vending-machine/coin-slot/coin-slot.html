@@ -1,0 +1,15 @@
+<div class="coin-slot">
+  <div class="coin-slot__balance">Balance: {{ balanceCents() / 100 | currency }}</div>
+
+  <div class="coin-slot__buttons">
+    @for (coin of denominations; track coin.value) {
+      <button type="button" (click)="insertCoin.emit(coin.value)">
+        {{ coin.label }}
+      </button>
+    }
+  </div>
+
+  <button type="button" class="coin-slot__return" (click)="returnCoins.emit()">
+    Return Coins
+  </button>
+</div>

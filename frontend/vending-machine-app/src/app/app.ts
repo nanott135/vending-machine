@@ -1,11 +1,10 @@
-import { Component, signal } from '@angular/core';
+import { Component } from '@angular/core';
+import { VendingMachine } from './features/vending-machine/vending-machine/vending-machine';
 
 @Component({
   selector: 'app-root',
-  imports: [],
+  imports: [VendingMachine],
   templateUrl: './app.html',
-  styleUrl: './app.scss'
+  styleUrl: './app.scss',
 })
-export class App {
-  protected readonly title = signal('vending-machine-app');
-}
+export class App {}
