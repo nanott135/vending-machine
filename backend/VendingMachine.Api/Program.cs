@@ -1,16 +1,23 @@
+using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using VendingMachine.Api.Data;
+using VendingMachine.Api.Services;
 
 const string AngularDevCorsPolicy = "AngularDev";
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 builder.Services.AddDbContext<VendingMachineDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("VendingMachineDb")));
+
+builder.Services.AddSingleton<IMachineStateService, MachineStateService>();
+builder.Services.AddSingleton<IChangeMakingService, ChangeMakingService>();
+builder.Services.AddScoped<IVendingMachineService, VendingMachineService>();
 
 builder.Services.AddCors(options =>
 {
