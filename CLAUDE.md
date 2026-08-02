@@ -75,14 +75,58 @@ be kept secret from whoever opens the page. The API is scoped down via CORS only
 **Frontend structure** (`frontend/vending-machine-app/src/app/`):
 - `core/models/` - TS interfaces mirroring the backend DTOs
 - `core/services/` - `ProductService`, `MachineService` (insert/return coins, purchase), both thin
-  `HttpClient` wrappers
+  `HttpClient` wrappers; plus `SoundService` (see *Audio* below)
+- `core/utils/` - `product-image.ts` / `coin-image.ts`, which map a product **slot code** (`A1`..`D3`)
+  or coin denomination to its artwork. Product art is keyed by code, not by name keyword: the
+  original keyword matcher resolved `Chocolate Bar` to the cola art because `'chocolate'` contains
+  `'cola'`. Adding a product outside `A1`..`D3` falls back to the candy bar art.
 - `features/vending-machine/` - `VendingMachine` (container: owns balance/product-list signals, calls
-  the services, translates `PurchaseStatus` into a user-facing message), `ProductGrid` /
-  `ProductSlot` (3x4 grid, out-of-stock light), `CoinSlot` (denomination buttons, balance, return),
-  `Keypad` (builds a 2-character row+column code, e.g. `C3`, then emits it)
+  the services, translates `PurchaseStatus` into a user-facing message, and owns the viewport
+  scaler), `ProductGrid` / `ProductSlot` (3x4 grid, out-of-stock light), `CoinSlot` (denomination
+  buttons, balance, return), `Keypad` (builds a 2-character row+column code, e.g. `C3`, then emits
+  it), `DispenserBin` (the delivery tray - see *Dispenser* below)
 
 No routing, no NgRx - it's a single-screen app using Angular signals for state, which is enough at
 this scope.
+
+**Layout** - the product window sits on the left of the panel with a console strip down the right
+holding the balance/coins, keypad, message display and dispenser bin, inside a cabinet with a fixed
+780px natural width.
+
+**Fit-to-viewport scaling** - the whole cabinet is scaled uniformly so it always fits without
+scrolling (`html, body { overflow: hidden }`). `VendingMachine` computes the factor from the
+cabinet's `offsetWidth/offsetHeight` - which ignore transforms, so the scale can't feed back into
+its own input - and recomputes on window resize and via a `ResizeObserver`. Two things are load
+bearing and easy to break:
+- centring is `scale()` applied **before** `translate(-50%, -50%)` on an absolutely positioned box,
+  so the translate shifts by half the *scaled* size. Flex and grid centring both top-left align a
+  box larger than its container, which leaves the cabinet hanging off the edge once scaled;
+- there is deliberately **no responsive breakpoint**. A viewport-width media query fights the
+  scaler - stacking made the natural box taller and forced a *smaller* scale than not stacking.
+
+**Dispenser** (`features/vending-machine/dispenser-bin/`) - on a successful purchase the container
+passes the product down with an incrementing id. The id matters: `@for` tracking by it recreates the
+element per vend, so buying the same product twice replays the animation. The product drops in,
+holds, fades out at 2.3s, and the component clears it from the DOM at 3.15s - removing it rather
+than leaving it at `opacity: 0`, which would keep it in the accessibility tree.
+
+**Audio** (`core/services/sound.service.ts`) - every sound is synthesized at play time with the Web
+Audio API (oscillators for tones, bandpass-filtered noise for coin strikes). There are no audio
+assets. The `AudioContext` is created lazily on the first sound because browsers only allow it to
+start after a user gesture, and it returns `null` when unavailable or muted, which makes every play
+method a silent no-op - that is what keeps the service safe under test and SSR. Sounds: keypad blip,
+coin insert (strike, five uneven chute impacts, ramp slide, settle - pitched by denomination), coin
+return cascade, vend thunk-and-chime, and a reject buzz. A mute toggle in the marquee persists to
+`localStorage`.
+
+**Artwork** - all imagery is hand-authored SVG in `public/images/` (`products/<code>-<name>.svg`,
+`coins/`, `machine-facade.svg`), roughly 20KB in total. The mid-century palette and fonts live as
+CSS custom properties in `src/styles.scss` (`--cream`, `--coral`, `--turquoise`, `--mustard`,
+`--charcoal`, `--chrome`, `--script`, `--readout`); use those rather than hard-coding hex values, so
+the SCSS and the SVGs stay in step.
+
+**Animation and motion** - `prefers-reduced-motion` is honoured in the dispenser bin (no fall, no
+drift, opacity-only fade on the same schedule). Keep new motion behind the same guard.
 
 ## Conventions
 
@@ -102,3 +146,7 @@ this scope.
 - After pushing, open a PR with the host's CLI:
   - GitHub: `gh pr create --fill`
   - Azure DevOps: `az repos pr create`
+- `--fill` takes the PR title from the first commit, which misleads on a
+  multi-commit branch (a branch whose second commit replaces the first
+  gets titled after the work that was thrown away). Pass an explicit
+  `--title`/`--body` in that case.
