@@ -63,12 +63,12 @@ describe('DispenserBin', () => {
       expect(fixture.nativeElement.querySelector('.bin__item')).toBeTruthy();
 
       // Still on show partway through the hold.
-      vi.advanceTimersByTime(2000);
+      vi.advanceTimersByTime(1500);
       fixture.detectChanges();
       expect(fixture.nativeElement.querySelector('.bin__item')).toBeTruthy();
 
       // Gone once the drop, hold and fade have all elapsed.
-      vi.advanceTimersByTime(2500);
+      vi.advanceTimersByTime(2000);
       fixture.detectChanges();
       expect(fixture.nativeElement.querySelector('.bin__item')).toBeNull();
     });
@@ -77,7 +77,8 @@ describe('DispenserBin', () => {
       fixture.componentRef.setInput('item', { id: 1, product: candyBar });
       fixture.detectChanges();
 
-      vi.advanceTimersByTime(3800);
+      // Mid-fade: the fade runs from 2.3s to 3.0s.
+      vi.advanceTimersByTime(2600);
       fixture.componentRef.setInput('item', {
         id: 2,
         product: { ...candyBar, code: 'D2', name: 'Gum' },

@@ -15,11 +15,11 @@ export interface DispensedItem {
 const FLAP_OPEN_MS = 900;
 
 /**
- * When the item leaves the DOM. Must outlast the drop, the hold and the fade in
- * dispenser-bin.scss - the element is removed once it is already invisible, so a faded-out
- * product is not left sitting in the accessibility tree.
+ * When the item leaves the DOM. The fade in dispenser-bin.scss finishes at 3s (a 0.7s fade
+ * starting at 2.3s); this trails it slightly so the element is removed once it is already
+ * invisible, rather than leaving a faded-out product sitting in the accessibility tree.
  */
-const REMOVE_AFTER_MS = 4350;
+const REMOVE_AFTER_MS = 3150;
 
 @Component({
   selector: 'app-dispenser-bin',
