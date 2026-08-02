@@ -1,0 +1,111 @@
+:host {
+  display: flex;
+  /* Claims whatever height is left under the keypad and message. */
+  flex: 1;
+  min-height: 140px;
+}
+
+.bin {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  border: 3px solid var(--charcoal);
+  border-radius: 10px;
+  overflow: hidden;
+  perspective: 320px;
+  background: linear-gradient(180deg, #14141a 0%, #26262c 60%, #1b1b21 100%);
+  box-shadow:
+    inset 0 6px 14px rgba(0, 0, 0, 0.85),
+    inset 0 -2px 6px rgba(0, 0, 0, 0.6);
+}
+
+.bin__well {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0.4rem 0.5rem 0.5rem;
+  overflow: hidden;
+}
+
+.bin__item {
+  width: 150px;
+  max-width: 88%;
+  border: 2px solid var(--charcoal);
+  border-radius: 5px;
+  background: var(--cream);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.6);
+  animation: drop 0.85s cubic-bezier(0.33, 0, 0.4, 1) both;
+}
+
+/* Falls in from above the well, lands, and settles with two decaying bounces. */
+@keyframes drop {
+  0% {
+    transform: translateY(-150px) rotate(-14deg);
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  48% {
+    transform: translateY(0) rotate(0deg);
+  }
+  64% {
+    transform: translateY(-22px) rotate(4deg);
+  }
+  80% {
+    transform: translateY(0) rotate(0deg);
+  }
+  90% {
+    transform: translateY(-7px) rotate(-2deg);
+  }
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+}
+
+.bin__mouth {
+  flex: 0 0 auto;
+  padding: 0 0.35rem 0.35rem;
+}
+
+.bin__flap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 26px;
+  border: 2px solid var(--charcoal);
+  border-radius: 5px;
+  background: var(--chrome);
+  transform-origin: top center;
+  transition: transform 0.28s ease;
+  box-shadow: 0 -3px 8px rgba(0, 0, 0, 0.5);
+}
+
+.bin__flap--open {
+  transform: rotateX(68deg);
+}
+
+.bin__flap-label {
+  font-family: var(--readout);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  color: var(--charcoal);
+}
+
+/* Anyone who has asked for less motion gets the product already in the tray. */
+@media (prefers-reduced-motion: reduce) {
+  .bin__item {
+    animation: none;
+  }
+
+  .bin__flap {
+    transition: none;
+  }
+
+  .bin__flap--open {
+    transform: none;
+  }
+}

@@ -7,12 +7,13 @@ import { MachineService } from '../../../core/services/machine.service';
 import { ProductService } from '../../../core/services/product.service';
 import { SoundService } from '../../../core/services/sound.service';
 import { CoinSlot } from '../coin-slot/coin-slot';
+import { DispensedItem, DispenserBin } from '../dispenser-bin/dispenser-bin';
 import { Keypad } from '../keypad/keypad';
 import { ProductGrid } from '../product-grid/product-grid';
 
 @Component({
   selector: 'app-vending-machine',
-  imports: [ProductGrid, CoinSlot, Keypad],
+  imports: [ProductGrid, CoinSlot, Keypad, DispenserBin],
   templateUrl: './vending-machine.html',
   styleUrl: './vending-machine.scss',
 })
@@ -25,6 +26,9 @@ export class VendingMachine implements OnInit {
   protected readonly balanceCents = signal(0);
   protected readonly message = signal<string | null>(null);
   protected readonly muted = this.sound.muted;
+  protected readonly dispensed = signal<DispensedItem | null>(null);
+
+  private dispenseCount = 0;
 
   protected toggleMute(): void {
     this.sound.toggleMute();
@@ -82,6 +86,10 @@ export class VendingMachine implements OnInit {
 
     switch (result.status) {
       case 'Success': {
+        if (result.product) {
+          // A fresh id each time, so repeat buys of one product still replay the drop.
+          this.dispensed.set({ id: ++this.dispenseCount, product: result.product });
+        }
         const changeText = result.changeBreakdown?.length
           ? ` Change returned: ${result.changeBreakdown
               .map((c) => `${c.count}x ${c.denomination}`)
