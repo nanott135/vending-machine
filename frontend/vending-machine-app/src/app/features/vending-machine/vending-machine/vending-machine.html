@@ -13,19 +13,23 @@
   </button>
 
   <div class="vending-machine__panel">
-    <app-product-grid [products]="products()" />
+    <div class="vending-machine__body">
+      <app-product-grid [products]="products()" />
 
-    <div class="vending-machine__controls">
-      <app-coin-slot
-        [balanceCents]="balanceCents()"
-        (insertCoin)="onInsertCoin($event)"
-        (returnCoins)="onReturnCoins()"
-      />
-      <app-keypad (selectCode)="onSelectCode($event)" />
+      <div class="vending-machine__console">
+        <app-coin-slot
+          [balanceCents]="balanceCents()"
+          (insertCoin)="onInsertCoin($event)"
+          (returnCoins)="onReturnCoins()"
+        />
+        <app-keypad (selectCode)="onSelectCode($event)" />
+
+        @if (message()) {
+          <p class="vending-machine__message">{{ message() }}</p>
+        }
+
+        <app-dispenser-bin [item]="dispensed()" />
+      </div>
     </div>
-
-    @if (message()) {
-      <p class="vending-machine__message">{{ message() }}</p>
-    }
   </div>
 </div>
