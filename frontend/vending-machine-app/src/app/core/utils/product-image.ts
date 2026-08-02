@@ -1,22 +1,25 @@
 import { Product } from '../models/product.model';
 
-// Products are matched to a shared category photo by keyword rather than sourcing a unique
-// photo per product - keeps the asset set small while still giving every slot a real image.
-const CATEGORY_IMAGES: { keywords: string[]; image: string }[] = [
-  { keywords: ['cola', 'root beer', 'soda'], image: '/images/products/soda-can.jpg' },
-  { keywords: ['water'], image: '/images/products/water-bottle.jpg' },
-  { keywords: ['chips', 'pretzels'], image: '/images/products/chips.jpg' },
-  { keywords: ['candy', 'chocolate'], image: '/images/products/candy-bar.jpg' },
-  { keywords: ['gum'], image: '/images/products/gum.jpg' },
-  { keywords: ['crackers'], image: '/images/products/crackers.jpg' },
-];
+// Every slot has its own illustration, keyed by the product's slot code. Codes are exact keys
+// rather than name keywords - matching on names is what made 'Chocolate Bar' resolve to the cola
+// art, since 'chocolate' contains 'cola'.
+const SLOT_IMAGES: Record<string, string> = {
+  A1: '/images/products/a1-cola.svg',
+  A2: '/images/products/a2-diet-cola.svg',
+  A3: '/images/products/a3-root-beer.svg',
+  B1: '/images/products/b1-orange-soda.svg',
+  B2: '/images/products/b2-sparkling-water.svg',
+  B3: '/images/products/b3-bottled-water.svg',
+  C1: '/images/products/c1-chips.svg',
+  C2: '/images/products/c2-pretzels.svg',
+  C3: '/images/products/c3-candy-bar.svg',
+  D1: '/images/products/d1-chocolate-bar.svg',
+  D2: '/images/products/d2-gum.svg',
+  D3: '/images/products/d3-crackers.svg',
+};
 
-const FALLBACK_IMAGE = '/images/products/candy-bar.jpg';
+const FALLBACK_IMAGE = '/images/products/c3-candy-bar.svg';
 
-export function productImageFor(product: Pick<Product, 'name'>): string {
-  const name = product.name.toLowerCase();
-  const match = CATEGORY_IMAGES.find((category) =>
-    category.keywords.some((keyword) => name.includes(keyword)),
-  );
-  return match?.image ?? FALLBACK_IMAGE;
+export function productImageFor(product: Pick<Product, 'code'>): string {
+  return SLOT_IMAGES[product.code.toUpperCase()] ?? FALLBACK_IMAGE;
 }

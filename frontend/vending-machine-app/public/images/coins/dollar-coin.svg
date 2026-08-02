@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48" role="img" aria-label="One dollar coin">
+  <circle cx="24" cy="24" r="23" fill="#D3A03C" stroke="#2B2B2E" stroke-width="2"/>
+  <circle cx="24" cy="24" r="19" fill="#E9C266" stroke="#A87C24" stroke-width="1.2"/>
+  <g stroke="#A87C24" stroke-width="1.5" stroke-linecap="round">
+    <path d="M24 2 v3.5 M24 42.5 v3.5 M2 24 h3.5 M42.5 24 h3.5"/>
+    <path d="M8.4 8.4 l2.5 2.5 M37.1 37.1 l2.5 2.5 M39.6 8.4 l-2.5 2.5 M10.9 37.1 l-2.5 2.5"/>
+  </g>
+  <text x="24" y="30" font-family="Georgia, 'Times New Roman', serif" font-weight="700" font-size="17" fill="#7A5713" text-anchor="middle">$1</text>
+  <path d="M12 15 q12 -5 24 0" stroke="#FFF3D2" stroke-width="2.4" fill="none" opacity="0.6" stroke-linecap="round"/>
+</svg>

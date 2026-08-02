@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 90" width="120" height="90" role="img" aria-label="Candy bar">
+  <rect width="120" height="90" fill="#F6EDDA"/>
+  <g stroke="#E2543F" stroke-width="2" opacity="0.4" stroke-linecap="round">
+    <path d="M14 12 L14 26 M7 19 L21 19 M9.5 14.5 L18.5 23.5 M18.5 14.5 L9.5 23.5"/>
+    <path d="M106 70 L106 82 M100 76 L112 76"/>
+  </g>
+  <ellipse cx="60" cy="72" rx="30" ry="4" fill="#2B2B2E" opacity="0.18"/>
+  <g transform="rotate(-12 60 45)">
+    <path d="M22 34 h76 v22 h-76 z" fill="#E2543F" stroke="#2B2B2E" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M22 34 l-8 -4 v30 l8 -4 z" fill="#C43C2A" stroke="#2B2B2E" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M98 34 l8 -4 v30 l-8 -4 z" fill="#C43C2A" stroke="#2B2B2E" stroke-width="2" stroke-linejoin="round"/>
+    <rect x="30" y="38" width="60" height="14" rx="2" fill="#F6EDDA"/>
+    <text x="60" y="49" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-weight="700" font-size="11" fill="#E2543F" text-anchor="middle">Candy</text>
+    <path d="M26 38 v14" stroke="#F0B94E" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M94 38 v14" stroke="#F0B94E" stroke-width="2.5" stroke-linecap="round"/>
+  </g>
+</svg>

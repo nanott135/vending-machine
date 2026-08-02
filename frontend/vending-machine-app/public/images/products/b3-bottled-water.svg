@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 90" width="120" height="90" role="img" aria-label="Bottled water">
+  <rect width="120" height="90" fill="#F6EDDA"/>
+  <g stroke="#4EC3C7" stroke-width="2" opacity="0.3" stroke-linecap="round">
+    <path d="M14 12 L14 26 M7 19 L21 19"/>
+    <path d="M106 70 L106 82 M100 76 L112 76"/>
+  </g>
+  <ellipse cx="60" cy="80" rx="20" ry="4" fill="#2B2B2E" opacity="0.18"/>
+  <path d="M54 14 h12 v8 q0 4 5 9 q3 5 3 12 v25 q0 6 -6 6 h-16 q-6 0 -6 -6 v-25 q0 -7 3 -12 q5 -5 5 -9 z"
+        fill="#DFF3F7" stroke="#2B2B2E" stroke-width="2" stroke-linejoin="round"/>
+  <rect x="53" y="10" width="14" height="6" rx="1.5" fill="#2E7BB5" stroke="#2B2B2E" stroke-width="2"/>
+  <path d="M46 45 h28 v14 h-28 z" fill="#2E7BB5" stroke="#2B2B2E" stroke-width="2"/>
+  <path d="M60 47.5 q4 5 4 7.5 a4 4 0 0 1 -8 0 q0 -2.5 4 -7.5 z" fill="#F6EDDA"/>
+  <path d="M48 66 q12 4 24 0" stroke="#9CC9DC" stroke-width="2" fill="none"/>
+  <path d="M50 32 q3 -6 6 -8" stroke="#FFFFFF" stroke-width="2.5" fill="none" opacity="0.9" stroke-linecap="round"/>
+</svg>

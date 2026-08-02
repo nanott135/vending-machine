@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 90" width="120" height="90" role="img" aria-label="Pack of gum">
+  <rect width="120" height="90" fill="#F6EDDA"/>
+  <g stroke="#4EC3C7" stroke-width="2" opacity="0.4" stroke-linecap="round">
+    <path d="M14 12 L14 26 M7 19 L21 19 M9.5 14.5 L18.5 23.5 M18.5 14.5 L9.5 23.5"/>
+    <path d="M106 70 L106 82 M100 76 L112 76"/>
+  </g>
+  <ellipse cx="60" cy="78" rx="22" ry="4" fill="#2B2B2E" opacity="0.18"/>
+  <rect x="30" y="20" width="18" height="52" rx="2.5" fill="#8FD9C4" stroke="#2B2B2E" stroke-width="2" transform="rotate(-6 39 46)"/>
+  <rect x="50" y="16" width="20" height="56" rx="3" fill="#4EC3C7" stroke="#2B2B2E" stroke-width="2"/>
+  <rect x="50" y="30" width="20" height="26" fill="#F6EDDA"/>
+  <path d="M50 30 h20 M50 56 h20" stroke="#2B2B2E" stroke-width="2"/>
+  <text x="60" y="42" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-weight="700" font-size="9" fill="#1F7A7D" text-anchor="middle">Gum</text>
+  <path d="M55 47 q5 4 10 0" stroke="#4EC3C7" stroke-width="1.8" fill="none"/>
+  <text x="60" y="53" font-family="Helvetica, Arial, sans-serif" font-weight="700" font-size="4.5" letter-spacing="0.7" fill="#1F7A7D" text-anchor="middle">MINT</text>
+  <rect x="72" y="20" width="18" height="52" rx="2.5" fill="#8FD9C4" stroke="#2B2B2E" stroke-width="2" transform="rotate(6 81 46)"/>
+</svg>

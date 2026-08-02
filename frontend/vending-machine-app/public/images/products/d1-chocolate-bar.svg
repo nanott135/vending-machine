@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 90" width="120" height="90" role="img" aria-label="Chocolate bar">
+  <rect width="120" height="90" fill="#F6EDDA"/>
+  <g stroke="#8A5A2B" stroke-width="2" opacity="0.35" stroke-linecap="round">
+    <path d="M14 12 L14 26 M7 19 L21 19 M9.5 14.5 L18.5 23.5 M18.5 14.5 L9.5 23.5"/>
+    <path d="M106 70 L106 82 M100 76 L112 76"/>
+  </g>
+  <ellipse cx="60" cy="74" rx="30" ry="4" fill="#2B2B2E" opacity="0.18"/>
+  <g transform="rotate(-8 60 46)">
+    <rect x="24" y="26" width="72" height="40" rx="3" fill="#5A3418" stroke="#2B2B2E" stroke-width="2"/>
+    <g fill="#7A4A24" stroke="#2B2B2E" stroke-width="1.2">
+      <rect x="28" y="30" width="20" height="15" rx="1.5"/>
+      <rect x="50" y="30" width="20" height="15" rx="1.5"/>
+      <rect x="72" y="30" width="20" height="15" rx="1.5"/>
+    </g>
+    <rect x="24" y="48" width="72" height="18" rx="2" fill="#F0B94E" stroke="#2B2B2E" stroke-width="2"/>
+    <text x="60" y="61" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-weight="700" font-size="11" fill="#5A3418" text-anchor="middle">Chocolat</text>
+  </g>
+</svg>
