@@ -36,7 +36,12 @@
   border-radius: 5px;
   background: var(--cream);
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.6);
-  animation: drop 0.85s cubic-bezier(0.33, 0, 0.4, 1) both;
+  /* Two separate animations rather than one long keyframe set, so stretching the hold never
+     distorts the drop's easing. The item falls, sits in the tray, then fades out; the component
+     removes it from the DOM shortly after the fade completes. */
+  animation:
+    drop 0.85s cubic-bezier(0.33, 0, 0.4, 1) both,
+    fade-away 0.7s ease-in 3.5s forwards;
 }
 
 /* Falls in from above the well, lands, and settles with two decaying bounces. */
@@ -62,6 +67,24 @@
   }
   100% {
     transform: translateY(0) rotate(0deg);
+  }
+}
+
+/* Sinks slightly as it goes, as though it has been taken out of the tray. */
+@keyframes fade-away {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.96);
+  }
+}
+
+/* Same timing, no movement. */
+@keyframes fade-out-only {
+  to {
+    opacity: 0;
   }
 }
 
@@ -98,7 +121,8 @@
 /* Anyone who has asked for less motion gets the product already in the tray. */
 @media (prefers-reduced-motion: reduce) {
   .bin__item {
-    animation: none;
+    /* No fall and no drift - the product is simply there, then fades out in place. */
+    animation: fade-out-only 0.7s ease-in 3.5s forwards;
   }
 
   .bin__flap {
