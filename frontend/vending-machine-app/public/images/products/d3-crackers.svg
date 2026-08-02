@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 90" width="120" height="90" role="img" aria-label="Box of crackers">
+  <rect width="120" height="90" fill="#F6EDDA"/>
+  <g stroke="#F0B94E" stroke-width="2" opacity="0.5" stroke-linecap="round">
+    <path d="M14 12 L14 26 M7 19 L21 19 M9.5 14.5 L18.5 23.5 M18.5 14.5 L9.5 23.5"/>
+    <path d="M106 70 L106 82 M100 76 L112 76"/>
+  </g>
+  <ellipse cx="60" cy="78" rx="26" ry="4" fill="#2B2B2E" opacity="0.18"/>
+  <path d="M36 24 h40 v50 h-40 z" fill="#E2543F" stroke="#2B2B2E" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M76 24 l10 -6 v50 l-10 6 z" fill="#C43C2A" stroke="#2B2B2E" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M36 24 l10 -6 h40 l-10 6 z" fill="#F0644E" stroke="#2B2B2E" stroke-width="2" stroke-linejoin="round"/>
+  <rect x="41" y="36" width="30" height="24" rx="2" fill="#F6EDDA" stroke="#2B2B2E" stroke-width="1.5"/>
+  <g fill="#F0B94E" stroke="#2B2B2E" stroke-width="1.2">
+    <rect x="45" y="40" width="12" height="12" rx="1.5"/>
+    <rect x="55" y="44" width="12" height="12" rx="1.5"/>
+  </g>
+  <g fill="#2B2B2E">
+    <circle cx="48" cy="43" r="0.7"/><circle cx="54" cy="43" r="0.7"/>
+    <circle cx="48" cy="49" r="0.7"/><circle cx="54" cy="49" r="0.7"/>
+    <circle cx="58" cy="47" r="0.7"/><circle cx="64" cy="47" r="0.7"/>
+    <circle cx="58" cy="53" r="0.7"/><circle cx="64" cy="53" r="0.7"/>
+  </g>
+  <text x="56" y="68" font-family="Helvetica, Arial, sans-serif" font-weight="700" font-size="6" letter-spacing="1" fill="#F6EDDA" text-anchor="middle">CRACKERS</text>
+</svg>

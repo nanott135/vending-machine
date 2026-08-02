@@ -4,7 +4,8 @@
   <div class="coin-slot__buttons">
     @for (coin of denominations; track coin.value) {
       <button type="button" (click)="insertCoin.emit(coin.value)">
-        {{ coin.label }}
+        <img [src]="coin.image" [alt]="coin.label" />
+        <span>{{ coin.label }}</span>
       </button>
     }
   </div>

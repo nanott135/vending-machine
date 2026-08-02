@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 90" width="120" height="90" role="img" aria-label="Root beer bottle">
+  <rect width="120" height="90" fill="#F6EDDA"/>
+  <g stroke="#8A5A2B" stroke-width="2" opacity="0.3" stroke-linecap="round">
+    <path d="M14 12 L14 26 M7 19 L21 19"/>
+    <path d="M104 68 L104 80 M98 74 L110 74"/>
+  </g>
+  <ellipse cx="60" cy="80" rx="20" ry="4" fill="#2B2B2E" opacity="0.18"/>
+  <path d="M54 12 h12 v10 q0 4 4 8 q4 6 4 14 v26 q0 6 -6 6 h-16 q-6 0 -6 -6 v-26 q0 -8 4 -14 q4 -4 4 -8 z"
+        fill="#6B3410" stroke="#2B2B2E" stroke-width="2" stroke-linejoin="round"/>
+  <rect x="53" y="9" width="14" height="6" rx="1.5" fill="#F0B94E" stroke="#2B2B2E" stroke-width="2"/>
+  <path d="M46 46 h28 v20 h-28 z" fill="#F0B94E" stroke="#2B2B2E" stroke-width="2"/>
+  <text x="60" y="55" font-family="Georgia, 'Times New Roman', serif" font-weight="700" font-size="7.5" fill="#6B3410" text-anchor="middle">ROOT</text>
+  <text x="60" y="63" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-weight="700" font-size="8" fill="#6B3410" text-anchor="middle">Beer</text>
+  <path d="M51 30 q3 -6 6 -8" stroke="#F6EDDA" stroke-width="2.5" fill="none" opacity="0.4" stroke-linecap="round"/>
+</svg>

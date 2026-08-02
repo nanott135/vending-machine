@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 90" width="120" height="90" role="img" aria-label="Bag of chips">
+  <rect width="120" height="90" fill="#F6EDDA"/>
+  <g stroke="#F0B94E" stroke-width="2" opacity="0.5" stroke-linecap="round">
+    <path d="M14 12 L14 26 M7 19 L21 19 M9.5 14.5 L18.5 23.5 M18.5 14.5 L9.5 23.5"/>
+    <path d="M106 70 L106 82 M100 76 L112 76"/>
+  </g>
+  <ellipse cx="60" cy="80" rx="24" ry="4" fill="#2B2B2E" opacity="0.18"/>
+  <path d="M38 18 h44 v56 h-44 z" fill="#F0B94E" stroke="#2B2B2E" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M38 18 q11 5 22 0 q11 5 22 0 v6 q-11 5 -22 0 q-11 5 -22 0 z" fill="#D89A2B" stroke="#2B2B2E" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M38 68 q11 5 22 0 q11 5 22 0 v6 q-11 5 -22 0 q-11 5 -22 0 z" fill="#D89A2B" stroke="#2B2B2E" stroke-width="2" stroke-linejoin="round"/>
+  <ellipse cx="60" cy="45" rx="20" ry="13" fill="#E2543F" stroke="#2B2B2E" stroke-width="2"/>
+  <text x="60" y="44" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-weight="700" font-size="9" fill="#F6EDDA" text-anchor="middle">Chips</text>
+  <path d="M50 51 q10 4 20 0" stroke="#F6EDDA" stroke-width="1.6" fill="none" opacity="0.8"/>
+  <path d="M42 30 q4 -3 8 0" stroke="#FFFFFF" stroke-width="2" fill="none" opacity="0.45" stroke-linecap="round"/>
+</svg>

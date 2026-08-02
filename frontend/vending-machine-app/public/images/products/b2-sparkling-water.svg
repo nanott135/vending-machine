@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 90" width="120" height="90" role="img" aria-label="Sparkling water bottle">
+  <rect width="120" height="90" fill="#F6EDDA"/>
+  <g stroke="#4EC3C7" stroke-width="2" opacity="0.4" stroke-linecap="round">
+    <path d="M14 12 L14 26 M7 19 L21 19 M9.5 14.5 L18.5 23.5 M18.5 14.5 L9.5 23.5"/>
+    <path d="M106 70 L106 82 M100 76 L112 76"/>
+  </g>
+  <ellipse cx="60" cy="80" rx="20" ry="4" fill="#2B2B2E" opacity="0.18"/>
+  <path d="M54 14 h12 v8 q0 4 5 9 q3 5 3 12 v25 q0 6 -6 6 h-16 q-6 0 -6 -6 v-25 q0 -7 3 -12 q5 -5 5 -9 z"
+        fill="#CFEDEF" stroke="#2B2B2E" stroke-width="2" stroke-linejoin="round"/>
+  <rect x="53" y="10" width="14" height="6" rx="1.5" fill="#4EC3C7" stroke="#2B2B2E" stroke-width="2"/>
+  <g fill="#FFFFFF" opacity="0.95">
+    <circle cx="55" cy="52" r="2.6"/>
+    <circle cx="65" cy="46" r="2"/>
+    <circle cx="61" cy="60" r="2.3"/>
+    <circle cx="53" cy="65" r="1.7"/>
+    <circle cx="67" cy="62" r="1.6"/>
+  </g>
+  <path d="M46 44 h28 v12 h-28 z" fill="#1F7A7D" stroke="#2B2B2E" stroke-width="2"/>
+  <text x="60" y="52.5" font-family="Helvetica, Arial, sans-serif" font-weight="700" font-size="6" letter-spacing="0.8" fill="#F6EDDA" text-anchor="middle">SPARKLING</text>
+  <path d="M50 32 q3 -6 6 -8" stroke="#FFFFFF" stroke-width="2.5" fill="none" opacity="0.8" stroke-linecap="round"/>
+</svg>

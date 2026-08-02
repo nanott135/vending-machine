@@ -1,18 +1,20 @@
 <div class="vending-machine">
   <h1>Vending Machine</h1>
 
-  <app-product-grid [products]="products()" />
+  <div class="vending-machine__panel">
+    <app-product-grid [products]="products()" />
 
-  <div class="vending-machine__controls">
-    <app-coin-slot
-      [balanceCents]="balanceCents()"
-      (insertCoin)="onInsertCoin($event)"
-      (returnCoins)="onReturnCoins()"
-    />
-    <app-keypad (selectCode)="onSelectCode($event)" />
+    <div class="vending-machine__controls">
+      <app-coin-slot
+        [balanceCents]="balanceCents()"
+        (insertCoin)="onInsertCoin($event)"
+        (returnCoins)="onReturnCoins()"
+      />
+      <app-keypad (selectCode)="onSelectCode($event)" />
+    </div>
+
+    @if (message()) {
+      <p class="vending-machine__message">{{ message() }}</p>
+    }
   </div>
-
-  @if (message()) {
-    <p class="vending-machine__message">{{ message() }}</p>
-  }
 </div>
