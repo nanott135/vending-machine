@@ -1,7 +1,7 @@
 <div class="bin">
   <div class="bin__well">
     <!-- Tracking by id recreates the img on every vend, which restarts the drop animation. -->
-    @for (dispensed of item() ? [item()!] : []; track dispensed.id) {
+    @for (dispensed of current() ? [current()!] : []; track dispensed.id) {
       <img
         class="bin__item"
         [src]="imageFor(dispensed.product)"
