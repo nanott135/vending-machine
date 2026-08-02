@@ -5,6 +5,7 @@ import { Product } from '../../../core/models/product.model';
 import { PurchaseResult } from '../../../core/models/purchase-result.model';
 import { MachineService } from '../../../core/services/machine.service';
 import { ProductService } from '../../../core/services/product.service';
+import { SoundService } from '../../../core/services/sound.service';
 import { CoinSlot } from '../coin-slot/coin-slot';
 import { Keypad } from '../keypad/keypad';
 import { ProductGrid } from '../product-grid/product-grid';
@@ -18,10 +19,16 @@ import { ProductGrid } from '../product-grid/product-grid';
 export class VendingMachine implements OnInit {
   private readonly productService = inject(ProductService);
   private readonly machineService = inject(MachineService);
+  private readonly sound = inject(SoundService);
 
   protected readonly products = signal<Product[]>([]);
   protected readonly balanceCents = signal(0);
   protected readonly message = signal<string | null>(null);
+  protected readonly muted = this.sound.muted;
+
+  protected toggleMute(): void {
+    this.sound.toggleMute();
+  }
 
   ngOnInit(): void {
     this.refreshProducts();
@@ -37,10 +44,15 @@ export class VendingMachine implements OnInit {
   onReturnCoins(): void {
     this.machineService.returnCoins().subscribe((result) => {
       this.balanceCents.set(0);
+      const hasCoins = result.returnedCoins.length > 0;
+      // Only clatter when coins actually drop; an empty tray gets the reject buzz instead.
+      if (hasCoins) {
+        this.sound.coinReturn();
+      } else {
+        this.sound.reject();
+      }
       this.message.set(
-        result.returnedCoins.length
-          ? `Returned $${(result.returnedCents / 100).toFixed(2)}.`
-          : 'No coins to return.',
+        hasCoins ? `Returned $${(result.returnedCents / 100).toFixed(2)}.` : 'No coins to return.',
       );
     });
   }
@@ -53,6 +65,7 @@ export class VendingMachine implements OnInit {
         if (result?.status) {
           this.handlePurchaseResult(result);
         } else {
+          this.sound.reject();
           this.message.set('Something went wrong. Please try again.');
         }
       },
@@ -60,6 +73,13 @@ export class VendingMachine implements OnInit {
   }
 
   private handlePurchaseResult(result: PurchaseResult): void {
+    // One thunk-and-chime for a real vend, one buzz for every way it can be turned down.
+    if (result.status === 'Success') {
+      this.sound.vend();
+    } else {
+      this.sound.reject();
+    }
+
     switch (result.status) {
       case 'Success': {
         const changeText = result.changeBreakdown?.length

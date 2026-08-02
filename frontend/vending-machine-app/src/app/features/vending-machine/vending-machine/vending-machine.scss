@@ -27,6 +27,25 @@
   }
 }
 
+.vending-machine__mute {
+  position: absolute;
+  top: 1.4rem;
+  right: 1.6rem;
+  width: 34px;
+  height: 34px;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  background: var(--chrome);
+  border: 2px solid var(--charcoal);
+  border-radius: 50%;
+  box-shadow: 0 2px 4px rgba(43, 43, 46, 0.35);
+
+  &:active {
+    transform: scale(0.94);
+  }
+}
+
 .vending-machine__panel {
   position: relative;
   background: linear-gradient(180deg, rgba(246, 237, 218, 0.97) 0%, rgba(235, 220, 192, 0.97) 100%);
