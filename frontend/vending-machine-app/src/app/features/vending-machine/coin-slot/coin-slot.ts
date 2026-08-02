@@ -1,6 +1,7 @@
 import { CurrencyPipe } from '@angular/common';
-import { Component, input, output } from '@angular/core';
+import { Component, inject, input, output } from '@angular/core';
 import { CoinDenomination } from '../../../core/models/coin.model';
+import { SoundService } from '../../../core/services/sound.service';
 import { coinImageFor } from '../../../core/utils/coin-image';
 
 @Component({
@@ -10,6 +11,8 @@ import { coinImageFor } from '../../../core/utils/coin-image';
   styleUrl: './coin-slot.scss',
 })
 export class CoinSlot {
+  private readonly sound = inject(SoundService);
+
   readonly balanceCents = input.required<number>();
   readonly insertCoin = output<CoinDenomination>();
   readonly returnCoins = output<void>();
@@ -20,4 +23,10 @@ export class CoinSlot {
     { value: 'Quarter', label: '25¢', image: coinImageFor('Quarter') },
     { value: 'Dollar', label: '$1', image: coinImageFor('Dollar') },
   ];
+
+  /** Played on the click rather than on the API response, so the coin lands when it is pressed. */
+  onInsert(denomination: CoinDenomination): void {
+    this.sound.coinInsert(denomination);
+    this.insertCoin.emit(denomination);
+  }
 }

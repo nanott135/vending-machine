@@ -1,6 +1,17 @@
 <div class="vending-machine">
   <h1>Vending Machine</h1>
 
+  <button
+    type="button"
+    class="vending-machine__mute"
+    [attr.aria-pressed]="muted()"
+    [attr.aria-label]="muted() ? 'Unmute sound effects' : 'Mute sound effects'"
+    [title]="muted() ? 'Unmute sound effects' : 'Mute sound effects'"
+    (click)="toggleMute()"
+  >
+    {{ muted() ? '🔇' : '🔊' }}
+  </button>
+
   <div class="vending-machine__panel">
     <app-product-grid [products]="products()" />
 
