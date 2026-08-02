@@ -6,10 +6,12 @@ Building a greenfield vending machine simulator: Angular front end, ASP.NET Core
 
 Confirmed decisions from review:
 - **Full coin simulation**: user inserts real denominations (5c/10c/25c/$1); the machine keeps its own coin inventory and makes change from it on purchase (can decline a sale if it can't make exact change).
-- **DB**: local SQL Server / LocalDB via connection string (no Docker).
+- **DB**: local SQL Server via connection string (no Docker). This machine has a SQL Server Express named instance (`.\SQLEXPRESS`) running as a Windows service rather than the lightweight LocalDB runtime, so the connection string targets that instance.
 - **Products**: 12 products seeded via EF Core migration (no admin UI) — code, name, price, quantity, with a couple seeded at quantity 0 to demonstrate the out-of-stock light.
 
 One addition beyond the original ask, included because "full simulation" implies it: a **Return Coins** action, so a user who inserts money without buying isn't stuck. Flagging it here for visibility — easy to drop if unwanted.
+
+**Authentication: none.** Considered an API key or JWT to gate the API, but scrapped it — this is a single-user, browser-delivered SPA with no real users/identity, and any credential shipped to the Angular bundle is visible to whoever opens the page (dev tools/network tab), so it can't function as real security here, only as a soft deterrent. Not worth the added complexity for a local simulator with no sensitive data. The API is scoped down purely via CORS (only the Angular dev origin is allowed to call it). If this ever needs to be reachable beyond localhost or gets an admin surface, revisit this — the real fix at that point is a server-side component holding any secret, not a browser-visible key/token.
 
 ## Architecture
 
@@ -23,7 +25,7 @@ One addition beyond the original ask, included because "full simulation" implies
 
 **Grid/codes**: 3 columns × 4 rows = 12 slots, coded like the example (`C3`) as row letter A–D + column number 1–3. `Product.Code` is the row+column code directly (A1, A2, A3, B1, … D3).
 
-### Backend — `backend/VendingMachine.Api` (.NET 8 Web API) + `backend/VendingMachine.Api.Tests` (xUnit)
+### Backend — `backend/VendingMachine.Api` (.NET 10 Web API — current LTS, matches the installed SDK) + `backend/VendingMachine.Api.Tests` (xUnit)
 
 Single API project (no extra Domain/Infrastructure layering — not warranted at this scope), folders:
 - `Models/` — `Product`, `MachineCoinInventoryItem`, `CoinDenomination` enum (`Nickel=5, Dime=10, Quarter=25, Dollar=100`)
@@ -40,7 +42,7 @@ Purchase flow (`IVendingMachineService.Purchase`):
 4. On success, in one DB transaction: decrement product quantity, add inserted coins into inventory, subtract dispensed change coins from inventory, save.
 5. Reset in-memory pending balance to 0; return dispensed change breakdown + updated product.
 
-### Frontend — `frontend/vending-machine-app` (Angular, latest stable CLI, standalone components, signals for state — no NgRx/Router needed for a single-screen app)
+### Frontend — `frontend/vending-machine-app` (Angular CLI 22, standalone components, signals for state — no NgRx/Router needed for a single-screen app)
 
 - `core/models/` — TS interfaces mirroring the DTOs
 - `core/services/` — `product.service.ts` (fetch products), `machine.service.ts` (insert coin, return coins, purchase)
@@ -54,10 +56,10 @@ Purchase flow (`IVendingMachineService.Purchase`):
 
 ### Testing
 - Backend: xUnit tests for `ChangeMakingService` (exact-change success, insufficient-inventory failure) and `VendingMachineService` (successful purchase, insufficient funds, out of stock, no-exact-change), using EF Core's InMemory provider for service tests.
-- Frontend: default Angular CLI Karma/Jasmine specs for `product-slot` (out-of-stock rendering) and `coin-slot` (balance display).
+- Frontend: default Angular CLI test runner (Vitest, the CLI 22 default - not Karma/Jasmine as originally noted) for `product-slot` (out-of-stock rendering) and `coin-slot` (balance display).
 
 ### Git workflow (per repo's `CLAUDE.md`)
-Repo isn't a git repo yet → `git init` first, then single feature branch `feat/vending-machine-simulator`, with incremental commits as logical pieces land (backend scaffold → domain/migrations → services → controllers → frontend scaffold → components → wiring → tests), each shown for review before committing. PR opened at the end via `gh pr create --fill` (once a remote exists — will confirm before that step since there's no remote configured yet).
+Working on feature branch `feat/vending-machine-simulator`, with incremental commits as logical pieces land (domain/migrations → services → controllers → frontend scaffold → components → wiring → tests), each shown for review before committing. PR opened at the end via `gh pr create --fill` (once a remote exists — will confirm before that step since there's no remote configured yet).
 
 ### Docs
 Update root `CLAUDE.md` at the end with real build/test/run commands and the architecture summary above, once the structure exists to document.

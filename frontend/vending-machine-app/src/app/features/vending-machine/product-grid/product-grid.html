@@ -1,0 +1,5 @@
+<div class="grid">
+  @for (product of products(); track product.code) {
+    <app-product-slot [product]="product" />
+  }
+</div>
