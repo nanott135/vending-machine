@@ -1,7 +1,20 @@
+/* Fixed so the scaled cabinet is centred in the viewport and can never cause scrollbars. */
+.fit-stage {
+  position: fixed;
+  inset: 0;
+}
+
 .vending-machine {
-  position: relative;
-  max-width: 780px;
-  margin: 2rem auto;
+  /* Anchored at the stage centre, then scaled *before* the centring translate. Applying scale
+     first means the translate shifts by half the SCALED size, so the cabinet stays centred at
+     any factor - unlike flex/grid centring, which top-left aligns a box bigger than its
+     container and leaves it hanging off the edge once scaled. */
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform-origin: 0 0;
+  /* A fixed natural width gives the scaler something deterministic to measure. */
+  width: 780px;
   padding: 1.5rem 1.25rem 1.75rem;
   border-radius: 18px;
   overflow: hidden;
@@ -71,13 +84,6 @@
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-}
-
-/* Below the two-column breakpoint the console drops under the products. */
-@media (max-width: 660px) {
-  .vending-machine__body {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }
 
 .vending-machine__message {

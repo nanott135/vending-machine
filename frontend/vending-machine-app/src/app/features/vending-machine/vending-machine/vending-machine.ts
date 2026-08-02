@@ -1,5 +1,14 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, OnInit, inject, signal } from '@angular/core';
+import {
+  Component,
+  DestroyRef,
+  ElementRef,
+  OnInit,
+  afterNextRender,
+  inject,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { CoinDenomination } from '../../../core/models/coin.model';
 import { Product } from '../../../core/models/product.model';
 import { PurchaseResult } from '../../../core/models/purchase-result.model';
@@ -10,6 +19,25 @@ import { CoinSlot } from '../coin-slot/coin-slot';
 import { DispensedItem, DispenserBin } from '../dispenser-bin/dispenser-bin';
 import { Keypad } from '../keypad/keypad';
 import { ProductGrid } from '../product-grid/product-grid';
+
+/** Breathing room kept between the cabinet and the viewport edges, in CSS pixels. */
+const VIEWPORT_PADDING = 16;
+
+/** Cap on enlargement, so the cabinet doesn't balloon absurdly on a very large display. */
+const MAX_SCALE = 1.6;
+
+function fitScale(element: HTMLElement): number {
+  const width = element.offsetWidth;
+  const height = element.offsetHeight;
+  if (!width || !height) {
+    return 1;
+  }
+  return Math.min(
+    MAX_SCALE,
+    (window.innerWidth - VIEWPORT_PADDING * 2) / width,
+    (window.innerHeight - VIEWPORT_PADDING * 2) / height,
+  );
+}
 
 @Component({
   selector: 'app-vending-machine',
@@ -29,6 +57,30 @@ export class VendingMachine implements OnInit {
   protected readonly dispensed = signal<DispensedItem | null>(null);
 
   private dispenseCount = 0;
+
+  private readonly machine = viewChild.required<ElementRef<HTMLElement>>('machine');
+  private readonly destroyRef = inject(DestroyRef);
+
+  /** Uniform "fit to page" factor - the cabinet keeps its proportions and just shrinks to fit. */
+  protected readonly scale = signal(1);
+
+  constructor() {
+    afterNextRender(() => {
+      const element = this.machine().nativeElement;
+      const fit = () => this.scale.set(fitScale(element));
+
+      fit();
+      // offsetWidth/Height ignore transforms, so re-measuring never feeds back into the scale.
+      const observer = new ResizeObserver(fit);
+      observer.observe(element);
+      window.addEventListener('resize', fit);
+
+      this.destroyRef.onDestroy(() => {
+        observer.disconnect();
+        window.removeEventListener('resize', fit);
+      });
+    });
+  }
 
   protected toggleMute(): void {
     this.sound.toggleMute();

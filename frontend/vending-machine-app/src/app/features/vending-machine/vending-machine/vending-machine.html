@@ -1,34 +1,36 @@
-<div class="vending-machine">
-  <h1>Vending Machine</h1>
+<div class="fit-stage">
+  <div class="vending-machine" #machine [style.transform]="'scale(' + scale() + ') translate(-50%, -50%)'">
+    <h1>Vending Machine</h1>
 
-  <button
-    type="button"
-    class="vending-machine__mute"
-    [attr.aria-pressed]="muted()"
-    [attr.aria-label]="muted() ? 'Unmute sound effects' : 'Mute sound effects'"
-    [title]="muted() ? 'Unmute sound effects' : 'Mute sound effects'"
-    (click)="toggleMute()"
-  >
-    {{ muted() ? '🔇' : '🔊' }}
-  </button>
+    <button
+      type="button"
+      class="vending-machine__mute"
+      [attr.aria-pressed]="muted()"
+      [attr.aria-label]="muted() ? 'Unmute sound effects' : 'Mute sound effects'"
+      [title]="muted() ? 'Unmute sound effects' : 'Mute sound effects'"
+      (click)="toggleMute()"
+    >
+      {{ muted() ? '🔇' : '🔊' }}
+    </button>
 
-  <div class="vending-machine__panel">
-    <div class="vending-machine__body">
-      <app-product-grid [products]="products()" />
+    <div class="vending-machine__panel">
+      <div class="vending-machine__body">
+        <app-product-grid [products]="products()" />
 
-      <div class="vending-machine__console">
-        <app-coin-slot
-          [balanceCents]="balanceCents()"
-          (insertCoin)="onInsertCoin($event)"
-          (returnCoins)="onReturnCoins()"
-        />
-        <app-keypad (selectCode)="onSelectCode($event)" />
+        <div class="vending-machine__console">
+          <app-coin-slot
+            [balanceCents]="balanceCents()"
+            (insertCoin)="onInsertCoin($event)"
+            (returnCoins)="onReturnCoins()"
+          />
+          <app-keypad (selectCode)="onSelectCode($event)" />
 
-        @if (message()) {
-          <p class="vending-machine__message">{{ message() }}</p>
-        }
+          @if (message()) {
+            <p class="vending-machine__message">{{ message() }}</p>
+          }
 
-        <app-dispenser-bin [item]="dispensed()" />
+          <app-dispenser-bin [item]="dispensed()" />
+        </div>
       </div>
     </div>
   </div>

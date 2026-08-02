@@ -20,6 +20,13 @@
   box-sizing: border-box;
 }
 
+html,
+body {
+  height: 100%;
+  /* The cabinet scales to fit, so nothing should ever need scrolling. */
+  overflow: hidden;
+}
+
 body {
   margin: 0;
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
