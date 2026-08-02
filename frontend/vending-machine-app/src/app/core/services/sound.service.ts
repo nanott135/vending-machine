@@ -42,14 +42,46 @@ export class SoundService {
     this.tone(ctx, { type: 'square', frequency: 880, duration: 0.06, gain: 0.06 });
   }
 
-  /** Metallic clink: filtered noise for the strike, plus a ringing partial. */
+  /**
+   * A coin going into a real machine is not one clink - it is the strike at the slot, a scatter of
+   * quick irregular impacts as it tumbles down the chute, a metallic slide along the ramp, and a
+   * dull settle as it drops into the box. Impacts get lower and quieter on the way down.
+   */
   coinInsert(denomination: CoinDenomination): void {
     const ctx = this.audioContext();
     if (!ctx) {
       return;
     }
+    const now = ctx.currentTime;
     const pitch = COIN_PITCH[denomination];
-    this.clink(ctx, pitch, ctx.currentTime);
+
+    // The coin hitting the slot lip.
+    this.clink(ctx, pitch, now);
+
+    // Tumbling down the chute. Spacings are deliberately uneven - evenly spaced impacts read as a
+    // machine-gun rattle rather than something falling.
+    const bounces: [number, number, number][] = [
+      [0.068, 0.94, 0.75],
+      [0.121, 0.86, 0.58],
+      [0.163, 0.79, 0.44],
+      [0.221, 0.72, 0.3],
+      [0.268, 0.66, 0.19],
+    ];
+    for (const [delay, pitchScale, level] of bounces) {
+      this.clink(ctx, pitch * pitchScale, now + delay, level);
+    }
+
+    // Metallic slide along the ramp, under the impacts.
+    this.chuteSlide(ctx, pitch, now + 0.04);
+
+    // Landing in the coin box.
+    this.tone(ctx, {
+      type: 'triangle',
+      frequency: pitch * 0.3,
+      duration: 0.13,
+      gain: 0.05,
+      startAt: now + 0.31,
+    });
   }
 
   /** A little cascade of clinks, as if coins were dropping into the return tray. */
@@ -86,6 +118,34 @@ export class SoundService {
     const now = ctx.currentTime;
     this.tone(ctx, { type: 'sawtooth', frequency: 130, duration: 0.18, gain: 0.09, startAt: now });
     this.tone(ctx, { type: 'sawtooth', frequency: 98, duration: 0.3, gain: 0.09, startAt: now + 0.2 });
+  }
+
+  /** Noise swept down through a resonant bandpass - the coin skidding along the metal ramp. */
+  private chuteSlide(ctx: AudioContext, frequency: number, startAt: number): void {
+    const buffer = this.noise(ctx);
+    if (!buffer) {
+      return;
+    }
+    const duration = 0.3;
+
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.loop = true;
+
+    const bandpass = ctx.createBiquadFilter();
+    bandpass.type = 'bandpass';
+    bandpass.Q.value = 7;
+    bandpass.frequency.setValueAtTime(frequency * 1.1, startAt);
+    bandpass.frequency.exponentialRampToValueAtTime(frequency * 0.45, startAt + duration);
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, startAt);
+    gain.gain.exponentialRampToValueAtTime(0.05, startAt + 0.04);
+    gain.gain.exponentialRampToValueAtTime(0.0001, startAt + duration);
+
+    source.connect(bandpass).connect(gain).connect(ctx.destination);
+    source.start(startAt);
+    source.stop(startAt + duration + 0.02);
   }
 
   private clink(ctx: AudioContext, frequency: number, startAt: number, scale = 1): void {
