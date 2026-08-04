@@ -27,6 +27,7 @@ to `backend/`.
 11. [Testing with xUnit](#11-testing-with-xunit)
 12. [Running and troubleshooting](#12-running-and-troubleshooting)
 13. [Exercises](#13-exercises)
+14. [Appendix: inspecting the SQL EF Core generates](#14-appendix-inspecting-the-sql-ef-core-generates)
 
 ---
 
@@ -665,8 +666,22 @@ Scoped is the only correct answer: one unit of work per request.
 
 **`IVendingMachineService` is scoped** because it depends on the scoped `DbContext`. A singleton may
 not depend on a scoped service — it would capture the first request's context and keep using it
-forever. ASP.NET Core detects this "captive dependency" at startup and throws, which is a good
-example of the framework enforcing a rule rather than letting you discover it in production.
+forever.
+
+> **Captive dependency.** A short-lived service that gets trapped inside a longer-lived one, and so
+> outlives the scope it was built for. The container hands the singleton a `DbContext` when it is
+> first created; because the singleton is never rebuilt, it keeps that one context for the life of
+> the application. The dependency has been made *captive* — held prisoner by its consumer.
+>
+> The effects are nasty and intermittent: the context accumulates every entity it ever loads,
+> requests see each other's tracked changes, and it is used concurrently despite not being
+> thread-safe. Nothing fails immediately, which is what makes it hard to diagnose.
+>
+> The rule that prevents it: **a service may only depend on things that live at least as long as it
+> does.** Singleton → singleton is fine. Scoped → singleton is fine. Singleton → scoped is the error.
+
+ASP.NET Core detects this at startup and throws, which is a good example of the framework enforcing a
+rule rather than letting you discover it in production.
 
 ### Why interfaces
 
@@ -759,8 +774,9 @@ var sut = new VendingMachineService(context, new MachineStateService(), new Chan
 ```
 
 Nothing is ever substituted. `IChangeMakingService` has the better case — a change-making *algorithm*
-is genuinely swappable, and you could imagine a dynamic-programming implementation for a non-canonical
-coin set. `IMachineStateService` is closer to reflex.
+is genuinely swappable, and you could imagine a dynamic-programming implementation for a
+[non-canonical](#the-change-making-service) coin set — one where the greedy approach doesn't give the
+fewest coins. `IMachineStateService` is closer to reflex.
 
 So the fair summary is not "the `DbContext` is inconsistent." It is: **the `DbContext` is the one
 place where declining to add an interface is clearly correct, and the other two are debatable.**
@@ -1020,13 +1036,22 @@ translates to SQL:
 
 ```sql
 SELECT [p].[Code], [p].[Name], [p].[PriceCents], [p].[Quantity],
-       CASE WHEN [p].[Quantity] = 0 THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END,
+       ~CAST([p].[Quantity] ^ 0 AS bit),
        [p].[SlotOrder]
 FROM [Products] AS [p]
 ORDER BY [p].[SlotOrder]
 ```
 
-Even `p.Quantity == 0` became a SQL `CASE`. Two consequences worth holding onto:
+That is the real logged output, not a reconstruction — see
+[the appendix](#14-appendix-inspecting-the-sql-ef-core-generates) for how to capture it yourself.
+
+Note what happened to `p.Quantity == 0`. You might expect a `CASE WHEN ... THEN 1 ELSE 0 END`;
+EF chose a bitwise trick instead. `CAST(n AS bit)` yields 1 for any non-zero `n` and 0 for zero, so
+`~CAST([Quantity] ^ 0 AS bit)` inverts that into "quantity *is* zero". It's cheaper than a branch,
+and it's a good reminder that **the SQL EF produces is often not the SQL you'd have written** — which
+is the whole reason to look at it rather than assume.
+
+Two more consequences worth holding onto:
 
 **Deferred execution.** Nothing runs until `ToListAsync` (or `SingleOrDefaultAsync`, or a `foreach`).
 Up to that point you're composing a query, not executing one.
@@ -1157,17 +1182,33 @@ Note `A3` and `C2` are seeded at `Quantity = 0` **on purpose**: the front end ha
 indicator, and without a zero-stock product it could never be seen without first buying out a slot.
 The seed data is chosen to demonstrate the system's states.
 
-Coin inventory is seeded at 40/40/40/15 — enough float that change-making usually succeeds, few
+Coin inventory is seeded at 40/40/40/15 — enough coins that change-making usually succeeds, few
 enough dollars that it's possible to exhaust them and see the failure path.
 
 ### Resetting
+
+**Stop the API first.** SQL Server refuses to drop a database that has open connections, so a running
+API will fail the drop with `Cannot drop database ... it is currently in use`.
+
+```powershell
+dotnet ef database drop --force
+dotnet ef database update
+```
+
+To chain them so the second only runs if the first succeeds, note that **Windows PowerShell 5.1 has
+no `&&` operator** — it's a parse error, not a runtime failure:
+
+```powershell
+dotnet ef database drop --force; if ($?) { dotnet ef database update }
+```
+
+In bash, PowerShell 7+, or a CI script, the familiar form works:
 
 ```bash
 dotnet ef database drop --force && dotnet ef database update
 ```
 
-Stop the API first — SQL Server refuses to drop a database with open connections. This is the fast
-way back to a known-good state after experimenting.
+This is the fast way back to a known-good state after experimenting.
 
 ---
 
@@ -1239,7 +1280,7 @@ bounded by both what's in stock (`available`) and what's still owed (`remaining 
 division). Subtract and continue. If you reach zero, you've made change; if anything remains, return
 `null`.
 
-**Worked example — 75¢ from a full float:**
+**Worked example — 75¢ from a full coin inventory:**
 
 | Coin | `remaining / value` | Available | Take | Remaining |
 |---|---|---|---|---|
@@ -1265,10 +1306,30 @@ failing.
 an arbitrary coin system they can fail. The textbook counterexample: with coins {1, 3, 4}, making 6
 greedily gives 4+1+1 (three coins) when 3+3 (two coins) is optimal.
 
-US coinage {5, 10, 25, 100} is *canonical*: greedy is provably optimal for it. So this simple
-implementation is not a shortcut that happens to work — it's the right algorithm for this domain.
-**If you added a denomination, that guarantee would need rechecking**, and a general solution would
-need dynamic programming. That's precisely the kind of thing worth a comment, and the class has one.
+US coinage {5, 10, 25, 100} is *canonical*: greedy is provably optimal for it.
+
+> **Canonical coin system.** One where taking the largest coin that fits, repeatedly, always produces
+> the fewest coins possible. Not all coin systems have this property — it depends on the specific
+> numbers, and there is no way to tell by eye.
+>
+> Compare the two:
+>
+> | System | Make 6 greedily | Actual best | Canonical? |
+> |---|---|---|---|
+> | {1, 3, 4} | 4 + 1 + 1 = three coins | 3 + 3 = two coins | **No** |
+> | {5, 10, 25, 100} | *(no case where greedy loses)* | — | **Yes** |
+>
+> With {1, 3, 4}, grabbing the 4 first is what ruins it: it leaves 2, which only 1s can fill. Passing
+> over the larger coin would have done better. That can never happen with US coinage, and the
+> difference is a property of the numbers, not of the algorithm.
+>
+> The word is used the same way elsewhere in computing — "the canonical form" of something means the
+> single standard representation that a well-behaved procedure will always produce.
+
+So this simple implementation is not a shortcut that happens to work — it's the right algorithm for
+this domain. **If you added a denomination, that guarantee would need rechecking**, and a general
+solution would need dynamic programming. That's precisely the kind of thing worth a comment, and the
+class has one.
 
 **Design notes:**
 
@@ -1375,8 +1436,8 @@ if (changeCoins is null)
 
 **The coins you just inserted count toward your own change.** That's what the `foreach` adds. A real
 machine drops your coins into the same hopper it pays out from, so paying with a dollar for a 75¢
-item can be settled with that very dollar's worth of float. Omitting this would reject sales the
-machine could actually complete.
+item can be settled using that very dollar. Omitting this would reject sales the machine could
+actually complete.
 
 Note that `availableForChange` is a *separate* dictionary of counts (`i => i.Count` projects the
 number out), not a view onto the entities. Building it can't accidentally mutate inventory — which
@@ -1532,7 +1593,7 @@ Three deliberate details:
    atomicity. They prove the logic around it.
 
 3. **`EnsureCreated()`** creates the schema *and applies the `HasData` seed*. So every test starts
-   from the same 12 products and coin float the real application starts from. Tests reference `A3`
+   from the same 12 products and coin inventory the real application starts from. Tests reference `A3`
    knowing it's out of stock and `D2` knowing it costs 75¢, rather than building fixtures by hand.
 
 ### What the tests actually pin down
@@ -1544,7 +1605,7 @@ public async Task PurchaseAsync_NoExactChangeAvailable_RejectsPurchaseWithoutMut
     await using var context = CreateContext();
 
     var coinItems = await context.CoinInventory.ToListAsync();
-    foreach (var item in coinItems) { item.Count = 0; }      // empty the float
+    foreach (var item in coinItems) { item.Count = 0; }      // empty the machine's coins
     await context.SaveChangesAsync();
 
     var machineState = new MachineStateService();
@@ -1610,7 +1671,59 @@ dotnet run --project VendingMachine.Api --launch-profile http
 With the API running, Swagger UI is at <http://localhost:5022/swagger> — the fastest way to try
 endpoints without a client.
 
+### A note on shells
+
+This is a Windows repository, and three different shells are commonly used on it — Windows
+PowerShell 5.1, cmd.exe, and Git Bash. They disagree on exactly the syntax these examples need, so
+copying a command into the wrong one produces confusing errors rather than a clean "not supported":
+
+| | bash / Git Bash | Windows PowerShell 5.1 | cmd.exe |
+|---|---|---|---|
+| Line continuation | `\` | `` ` `` (backtick) | `^` |
+| Chain on success | `a && b` | `a; if ($?) { b }` | `a && b` |
+| Quote JSON inline | `'{"a":"b"}'` | `-Body '{"a":"b"}'` | `"{\"a\":\"b\"}"` |
+| `curl` runs | curl | **`Invoke-WebRequest`** (alias) | curl.exe |
+
+The last row causes the most confusion: in PowerShell, `curl -X POST -H ... -d ...` fails because
+`curl` is an alias for a cmdlet that has none of those switches. Use `Invoke-RestMethod`, or write
+`curl.exe` to bypass the alias.
+
+The failure modes are worth recognising. A stray `\` in cmd.exe becomes a *separate argument*, so
+curl reports `URL rejected: Bad hostname` for the backslash while still sending the request without
+the headers that followed it — which the API then rejects as `415 Unsupported Media Type`. Two
+confusing errors, one cause.
+
+Examples below are given for PowerShell and bash. In cmd.exe, put the whole command on one line and
+use the escaping from the table:
+
+```cmd
+curl -X POST http://localhost:5022/api/machine/coins -H "Content-Type: application/json" -d "{\"denomination\":\"Dollar\"}"
+```
+
+If you'd rather avoid the issue entirely, **Swagger UI at <http://localhost:5022/swagger> drives every
+endpoint from the browser** with no shell quoting at all.
+
 ### A manual walkthrough
+
+In PowerShell — note that `curl` there is an **alias for `Invoke-WebRequest`**, not the curl you know,
+so the bash flags below would fail. Use the native cmdlet, which also parses the JSON response into
+objects for you:
+
+```powershell
+Invoke-RestMethod http://localhost:5022/api/products
+
+Invoke-RestMethod -Method Post http://localhost:5022/api/machine/coins `
+  -ContentType 'application/json' -Body '{"denomination":"Dollar"}'
+# balanceCents : 100
+
+Invoke-RestMethod -Method Post http://localhost:5022/api/purchase `
+  -ContentType 'application/json' -Body '{"productCode":"D2"}'
+```
+
+The backtick is PowerShell's line continuation — a trailing `\` is a bash-ism and won't work. If you
+prefer real curl, `curl.exe` bypasses the alias and takes the usual flags.
+
+In bash (including Git Bash on Windows):
 
 ```bash
 curl http://localhost:5022/api/products
@@ -1637,7 +1750,7 @@ Try the failure paths too — `"A3"` for out of stock, an empty balance for insu
 | `dotnet ef` not recognised | `dotnet tool install --global dotnet-ef`. |
 | Browser: `blocked by CORS policy` | The front end isn't on `http://localhost:4200`, which is the only allowed origin. |
 | Balance resets unexpectedly | The API restarted. Pending balance is in-memory by design. |
-| Purchase returns 409 `ChangeUnavailable` | The coin float can't make exact change. Reset the DB or pay closer to exact. |
+| Purchase returns 409 `ChangeUnavailable` | The machine's coin inventory can't make exact change. Reset the DB or pay closer to exact. |
 
 ---
 
@@ -1666,6 +1779,183 @@ Roughly increasing in difficulty. Each touches a different layer.
    `DbUpdateConcurrencyException` for two simultaneous purchases of the last item. This is the real
    bug hiding in the current design: nothing stops two concurrent requests both passing the stock
    check.
+
+---
+
+## 14. Appendix: inspecting the SQL EF Core generates
+
+An ORM writes SQL on your behalf. That is the point of it — and also the risk, because a small change
+to a LINQ expression can change the query dramatically. Reading the generated SQL is the single most
+useful habit for working confidently with EF Core, and it's the first thing to do when something is
+slow, returns the wrong rows, or fails against a real database while passing in tests.
+
+Every example below is real output from this project.
+
+### 1. Console logging (already on in development)
+
+You don't need to add anything. EF Core logs every command it executes at `Information` level, and
+`appsettings.Development.json` sets:
+
+```json
+"Logging": { "LogLevel": { "Default": "Information", "Microsoft.AspNetCore": "Warning" } }
+```
+
+`Microsoft.EntityFrameworkCore.*` falls under `Default`, so run the API and the SQL scrolls past as
+you use the app:
+
+```bash
+dotnet run --project VendingMachine.Api --launch-profile http
+```
+
+The category carrying generated SQL is **`Microsoft.EntityFrameworkCore.Database.Command`**. To keep
+just that and quieten everything else:
+
+```json
+"Logging": {
+  "LogLevel": {
+    "Default": "Warning",
+    "Microsoft.EntityFrameworkCore.Database.Command": "Information"
+  }
+}
+```
+
+Each entry also reports elapsed milliseconds and the parameter list, which is usually enough to spot
+an N+1 query (the same statement repeating with different parameters) without any profiling tools.
+
+### 2. Seeing parameter values
+
+By default the log shows placeholders, not values:
+
+```sql
+WHERE [p].[Code] = @productCode
+```
+
+EF redacts them because parameters frequently contain personal data and logs travel. To see real
+values while developing:
+
+```csharp
+builder.Services.AddDbContext<VendingMachineDbContext>(options =>
+    options.UseSqlServer(builder.Configuration.GetConnectionString("VendingMachineDb"))
+           .EnableSensitiveDataLogging(builder.Environment.IsDevelopment()));
+```
+
+**Gate it on the environment.** Passing a bare `true` writes customer data into your production logs,
+which is a compliance problem rather than a debugging convenience.
+
+### 3. `ToQueryString()` — the SQL without executing it
+
+```csharp
+var sql = dbContext.Products
+    .OrderBy(p => p.SlotOrder)
+    .Select(p => new ProductDto(p.Code, p.Name, p.PriceCents, p.Quantity, p.Quantity == 0, p.SlotOrder))
+    .ToQueryString();
+```
+
+The best answer to "is this LINQ doing what I think?" The query is composed but never run, so you can
+inspect it in a debugger, print it from a scratch test, or assert on it.
+
+It only works on an `IQueryable` — before `ToListAsync`, `SingleOrDefaultAsync` or anything else that
+materialises. Once you've materialised, there's no query left to describe, only objects.
+
+### 4. `LogTo` — SQL to the console with no configuration
+
+```csharp
+options.UseSqlServer(connectionString)
+       .LogTo(Console.WriteLine, [DbLoggerCategory.Database.Command.Name], LogLevel.Information);
+```
+
+Useful in a test project or console app where there is no `appsettings.json` logging configuration to
+lean on. It takes any `Action<string>`, so it can write to a file or a test output helper instead.
+
+### 5. Migration SQL
+
+Everything above shows *queries*. For schema changes, ask for the script — this shows exactly what a
+migration will do **without applying it**:
+
+```bash
+dotnet ef migrations script                                    # from empty database to latest
+dotnet ef migrations script InitialCreate AddProductDescription # between two named migrations
+dotnet ef migrations script --idempotent                       # safe to re-run, checks history first
+dotnet ef migrations script --output migrate.sql               # write to a file
+```
+
+For a migration adding a nullable `Description` column, the output begins:
+
+```sql
+ALTER TABLE [Products] ADD [Description] nvarchar(200) NULL;
+
+UPDATE [Products] SET [Description] = NULL WHERE [Id] = 1;
+-- ... one per HasData seed row
+
+INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+VALUES (N'20260803222900_AddProductDescription', N'10.0.10');
+```
+
+Two things this exposes:
+
+- **`__EFMigrationsHistory` is an ordinary table** listing applied migration IDs. `database update`
+  reads it, works out which migrations are missing, runs them, and inserts a row for each. There is
+  no magic — you can query it like anything else.
+- **`--idempotent` is what you hand to a DBA.** Many organisations don't let an application alter
+  schema in production. You generate a reviewable script, and it goes through their release process
+  instead.
+
+### 6. Server-side tracing
+
+SQL Server Profiler, or **Extended Events** (its modern replacement), capture what the *server*
+receives — from every client, including other applications.
+
+That distinction matters when EF's log and the server's don't agree: connection pooling resetting
+state, a trigger firing, another process holding a lock. If EF says it sent one thing and the
+database behaves as though it received another, the gap between these two views is where the answer
+usually is.
+
+### A worked example: projection vs entity loading
+
+This is the difference [section 8](#linq-becomes-sql) describes, seen in real logged SQL. Two
+endpoints, two very different queries against the same table.
+
+`GET /api/products` projects into a DTO:
+
+```sql
+SELECT [p].[Code], [p].[Name], [p].[PriceCents], [p].[Quantity],
+       ~CAST([p].[Quantity] ^ 0 AS bit), [p].[SlotOrder]
+FROM [Products] AS [p]
+ORDER BY [p].[SlotOrder]
+```
+
+`POST /api/purchase` loads a tracked entity:
+
+```sql
+SELECT TOP(2) [p].[Id], [p].[Code], [p].[Name], [p].[PriceCents], [p].[Quantity], [p].[SlotOrder]
+FROM [Products] AS [p]
+WHERE [p].[Code] = @productCode
+```
+
+Two things to take from the comparison:
+
+- **The projection selects only the six values the DTO needs; the entity query selects every mapped
+  column,** including `Id`, which the DTO deliberately omits. EF has no choice — you might modify any
+  property and call `SaveChanges`, as the purchase flow does with `product.Quantity -= 1`, so it must
+  populate all of them.
+- **`TOP(2)` for a `SingleOrDefaultAsync`** is not a typo. "Single" means *at most one*, so EF asks
+  for two rows: if a second comes back, it throws rather than silently returning the first.
+  `FirstOrDefaultAsync` generates `TOP(1)` because it doesn't care. That one character is the entire
+  semantic difference described in [section 8](#singleordefaultasync-and-friends), visible in the SQL.
+
+### A practical debugging habit
+
+When a query misbehaves, work in this order:
+
+1. **Read the generated SQL** before theorising. It very often contains the answer directly — a
+   missing `WHERE`, an unexpected join, the same statement repeating fifty times.
+2. **Run it directly** against the database. If it returns what you expected, the bug is in mapping
+   or materialisation, not the query.
+3. **Check the execution plan** if it's slow. Missing-index warnings are usually the whole story.
+4. **Only then** change the LINQ — and re-read the SQL to confirm you changed what you thought.
+
+The failure mode this avoids is guessing at LINQ until the symptom disappears, which produces code
+nobody can explain and that breaks again on the next EF upgrade.
 
 ---
 
