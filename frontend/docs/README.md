@@ -30,6 +30,7 @@ Every code sample is real code from this project. File paths are relative to
 14. [Testing](#14-testing)
 15. [Build tooling](#15-build-tooling)
 16. [Exercises](#16-exercises)
+17. [Appendix: `const`, `readonly`, and actually preventing mutation](#17-appendix-const-readonly-and-actually-preventing-mutation)
 
 ---
 
@@ -268,7 +269,10 @@ const MAX_SCALE = 1.6;                            // binding can't be reassigned
 `${API_BASE_URL}/products`                        // template literal with interpolation
 ```
 
-`readonly` prevents reassigning the property, not mutating the object it points at.
+`readonly` prevents reassigning the property, not mutating the object it points at — and `const` is
+the same guarantee at the variable level, so a `const` object is still freely mutable.
+[Appendix 17](#17-appendix-const-readonly-and-actually-preventing-mutation) covers the distinction and
+what to use when you genuinely need to prevent mutation.
 
 ### Decorators
 
@@ -1601,6 +1605,115 @@ Roughly increasing in difficulty.
    `/swagger/v1/swagger.json`. This eliminates the hand-mirroring hazard described in
    [section 8](#the-contract-is-a-promise-not-a-guarantee) — the highest-value change on this list
    for a real project.
+
+---
+
+## 17. Appendix: `const`, `readonly`, and actually preventing mutation
+
+[Section 2](#readonly-const-and-template-literals) notes that `readonly` prevents *reassigning* a
+property, not mutating the object it points at. The same is true of `const`, and the distinction
+catches people out often enough to be worth its own treatment.
+
+### `const` protects the binding, not the value
+
+A common assumption is that declaring an object `const` makes it immutable. It does not:
+
+```javascript
+const config = { url: "a" };
+config.url = "b";        // fine — you mutated the object
+config = { url: "b" };   // TypeError: Assignment to constant variable.
+
+const arr = [1, 2];
+arr.push(3);             // fine — [1, 2, 3]
+```
+
+`const` means **this name will always point at this same value**. For a primitive that amounts to
+immutability, because you can't change `1` into `2`. For an object it means only that the *reference*
+is fixed — the thing it references is as mutable as ever.
+
+`readonly` on a class property is the same guarantee at a different level: it stops
+`this.rows = somethingElse`, and does nothing about `this.rows.push(...)`.
+
+### Where this bites in this codebase
+
+`features/vending-machine/keypad/keypad.ts`:
+
+```typescript
+const ROWS = ['A', 'B', 'C', 'D'];      // module-level: shared by every Keypad instance
+...
+protected readonly rows = ROWS;
+```
+
+`this.rows.push('E')` compiles cleanly. Both guards you might expect to stop it are aimed elsewhere —
+`const` at the binding, `readonly` at the property — and because `ROWS` lives at module scope, the
+mutation would affect every component instance in the application.
+
+Nothing writes to it, so this is latent rather than a live bug. `SLOT_IMAGES`, `COIN_IMAGES` and
+`COIN_PITCH` are `const` objects in the same position.
+
+### Three ways to actually prevent it
+
+**`as const`** — compile-time, deep, and usually what you want for a fixed list:
+
+```typescript
+const ROWS = ['A', 'B', 'C', 'D'] as const;
+// type: readonly ["A", "B", "C", "D"]
+
+ROWS.push('E');   // Property 'push' does not exist on type 'readonly [...]'
+```
+
+It also narrows each element to a *literal* type rather than `string`, which is often a bonus (the
+values become part of the type) and occasionally a nuisance (you can no longer assign an arbitrary
+string).
+
+**`readonly` type annotations** — compile-time, without the literal narrowing:
+
+```typescript
+const ROWS: readonly string[] = ['A', 'B', 'C', 'D'];
+const IMAGES: Readonly<Record<string, string>> = { ... };
+```
+
+**`Object.freeze()`** — the only option that exists at runtime:
+
+```javascript
+const frozen = Object.freeze({ url: "a", nested: { x: 1 } });
+frozen.url = "b";       // TypeError: Cannot assign to read only property 'url'
+frozen.nested.x = 99;   // succeeds — freeze is SHALLOW
+```
+
+Two things to know about it. It **throws** rather than failing silently, because ES modules are always
+in strict mode (in sloppy-mode scripts the write is ignored instead, which is worse). And it is
+**shallow** — nested objects are untouched, so deep immutability needs a recursive helper or a
+library.
+
+### Compile-time versus runtime
+
+This is the distinction that matters when choosing:
+
+| Tool | Enforced | Survives to the browser |
+|---|---|---|
+| `const` | Compile time (and runtime for rebinding) | The rebinding guard, yes |
+| `readonly` property | Compile time | **No — erased** |
+| `readonly` / `Readonly<T>` types | Compile time | **No — erased** |
+| `as const` | Compile time | **No — erased** |
+| `Object.freeze()` | Runtime | **Yes** |
+
+TypeScript's immutability is entirely a compile-time fiction, for the same reason the response types
+in [section 2](#so-what-actually-happens-if-the-shape-is-wrong) are: **types are erased**. That's
+perfectly sufficient for protecting your code from itself, which is the usual goal. It is not
+sufficient if the object crosses a boundary you don't control — data handed to a third-party library,
+say — where only `Object.freeze` actually holds.
+
+### Practical guidance
+
+- Reach for **`as const`** on fixed lists and lookup tables. It costs nothing at runtime and turns a
+  convention into a compile error.
+- Use **`Readonly<T>` / `readonly T[]`** in function signatures to say "I will not modify what you
+  pass me." It documents intent and the compiler enforces it.
+- Use **`Object.freeze`** sparingly — when you genuinely need the runtime guarantee, and knowing it is
+  shallow.
+- Don't reach for a deep-freeze utility by default. The runtime cost is real, and for code you own the
+  compile-time tools catch the same mistakes earlier.
 
 ---
 
