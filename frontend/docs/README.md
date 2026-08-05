@@ -302,7 +302,13 @@ resolves from `node_modules`.
 
 ### The chain
 
-`index.html` contains `<app-root></app-root>` and a script tag. That script runs `main.ts`:
+`index.html` contains a single `<app-root></app-root>` and nothing else — no script tag. The Angular
+CLI injects one at build time: it compiles `src/main.ts` (named as the entry point in `angular.json`)
+into a hashed bundle and writes `<script src="main-<hash>.js" type="module">` into the served copy of
+the HTML, along with a link to the compiled stylesheet. So the file the browser receives has a script
+tag; the file in the repository does not.
+
+That script runs `main.ts`:
 
 ```typescript
 // main.ts
@@ -1559,15 +1565,17 @@ Worth being explicit:
 ```bash
 npm install     # install dependencies from package.json
 ng serve        # dev server at localhost:4200, rebuilds on save
-ng build        # production bundle into dist/
+ng build        # production bundle into dist/vending-machine-app/browser/
 ng test         # Vitest
 ```
 
 - **`ng`** is the Angular CLI.
 - **`ng serve`** runs a dev server with hot reload — save a file and the browser updates in about a
   second.
-- **`ng build`** produces an optimised bundle: minified, tree-shaken (unused code removed), and
-  content-hashed for cache busting.
+- **`ng build`** produces an optimised bundle in `dist/vending-machine-app/browser/`: minified,
+  tree-shaken (unused code removed), and content-hashed for cache busting. It also emits the copy of
+  `index.html` that actually gets served — the one carrying the injected `<script>` and stylesheet
+  tags described in [section 3](#the-chain).
 - **`node_modules/`** holds dependencies and is not committed. `package-lock.json` pins exact
   versions so every machine installs the same tree — that one *is* committed.
 
