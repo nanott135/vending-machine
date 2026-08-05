@@ -193,8 +193,13 @@ export interface PurchaseResult {
 ```
 
 `Product | null` says the field is always there but may be null. `product?: Product` would mean the
-key might be absent entirely. Under `strictNullChecks` (on by default), TypeScript forces you to
-handle the null before using it — which is why the container writes `result.product?.name`.
+key might be absent entirely. Under `strictNullChecks`, TypeScript forces you to handle the null
+before using it — which is why the container writes `result.product?.name`.
+
+`strictNullChecks` is on here even though nothing in this project's `tsconfig.json` sets `strict`.
+It comes from TypeScript 6.0, which flipped `strict` to default *true*. On TypeScript 5.x the same
+config would have left it off, and `result.product.name` would have compiled silently. If you are
+reading this against an older toolchain, check `tsc --showConfig` rather than assuming.
 
 `?.` is **optional chaining**: evaluates to `undefined` instead of throwing if the left side is
 null/undefined.
@@ -302,7 +307,13 @@ resolves from `node_modules`.
 
 ### The chain
 
-`index.html` contains `<app-root></app-root>` and a script tag. That script runs `main.ts`:
+`index.html` contains a single `<app-root></app-root>` and nothing else — no script tag. The Angular
+CLI injects one at build time: it compiles `src/main.ts` (named as the entry point in `angular.json`)
+into a hashed bundle and writes `<script src="main-<hash>.js" type="module">` into the served copy of
+the HTML, along with a link to the compiled stylesheet. So the file the browser receives has a script
+tag; the file in the repository does not.
+
+That script runs `main.ts`:
 
 ```typescript
 // main.ts
@@ -609,7 +620,9 @@ outside the system, which is exactly what the dispenser does: it starts `setTime
 
 - **Precision** — only affected views update.
 - **Explicit dependencies** — reading is a call, so the graph is knowable rather than inferred.
-- **No zone.js required**, which means a smaller bundle and less monkey-patching of browser APIs.
+- **No zone.js.** Zoneless is the default from Angular v21 onwards — there is nothing to enable, and
+  this project has no zone.js dependency at all. Smaller bundle, and no monkey-patching of browser
+  APIs.
 - **Same idea everywhere** — state, derived state, inputs and outputs are all signals, so there's one
   concept to learn instead of four.
 
@@ -1295,9 +1308,10 @@ constructor() {
 - **`destroyRef.onDestroy`** disconnects both. An observer or listener outliving its component keeps
   the component alive and can fire against a destroyed view.
 
-There's no feedback loop, and it's worth being explicit about why: `ResizeObserver` watches the
-border-box layout size, which transforms don't affect. Setting the scale therefore cannot retrigger
-the observer.
+There's no feedback loop, and it's worth being explicit about why. `observer.observe(element)` with
+no options watches the **content box** — a layout measurement — and the Resize Observer specification
+states outright that "observations will not be triggered by CSS transforms." Setting the scale
+therefore cannot retrigger the observer.
 
 ### The centring, and why it's fiddly
 
@@ -1323,17 +1337,20 @@ the observer.
 
 The obvious approaches both fail:
 
-- **`display: grid; place-items: center`** — grid does not symmetrically centre an item *larger* than
-  its track. The 780px cabinet aligns to the left edge of a 390px viewport, and scaling about its
-  centre leaves it hanging off to the right.
+- **`display: grid; place-items: center`** — centring is *unsafe* by default, meaning an item larger
+  than its track is centred anyway and overflows equally in both directions. The 780px cabinet spills
+  195px past *each* edge of a 390px viewport, and the overflow past the start edge is unreachable —
+  you cannot scroll to it. Scaling from `transform-origin: 0 0` then starts from a top-left corner
+  that is already off-screen.
 - **`display: flex` with `margin: auto`** — auto margins collapse to zero when free space is
-  negative, so it top-left aligns for the same reason.
+  negative, so the cabinet top-left aligns and hangs off to the right.
 
 What works: anchor the box's origin at the stage centre with `top: 50%; left: 50%`, set
 `transform-origin: 0 0`, and apply `scale()` **before** `translate(-50%, -50%)`.
 
-Transform functions apply right to left, so the translate happens in the already-scaled coordinate
-system — shifting by half the *scaled* size. The element's visual top-left lands at
+Transform functions compose **left to right**, each one establishing the coordinate system the next
+operates in. `scale()` sets up a scaled coordinate system, and `translate(-50%, -50%)` then runs
+inside it — shifting by half the *scaled* size. The element's visual top-left lands at
 `(centre − scaledWidth/2, centre − scaledHeight/2)`: correctly centred at any factor.
 
 Reverse the order and the translate uses the unscaled size, centring the box it *would* have been.
@@ -1559,15 +1576,17 @@ Worth being explicit:
 ```bash
 npm install     # install dependencies from package.json
 ng serve        # dev server at localhost:4200, rebuilds on save
-ng build        # production bundle into dist/
+ng build        # production bundle into dist/vending-machine-app/browser/
 ng test         # Vitest
 ```
 
 - **`ng`** is the Angular CLI.
 - **`ng serve`** runs a dev server with hot reload — save a file and the browser updates in about a
   second.
-- **`ng build`** produces an optimised bundle: minified, tree-shaken (unused code removed), and
-  content-hashed for cache busting.
+- **`ng build`** produces an optimised bundle in `dist/vending-machine-app/browser/`: minified,
+  tree-shaken (unused code removed), and content-hashed for cache busting. It also emits the copy of
+  `index.html` that actually gets served — the one carrying the injected `<script>` and stylesheet
+  tags described in [section 3](#the-chain).
 - **`node_modules/`** holds dependencies and is not committed. `package-lock.json` pins exact
   versions so every machine installs the same tree — that one *is* committed.
 
