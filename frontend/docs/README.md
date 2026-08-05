@@ -212,6 +212,54 @@ getProducts(): Observable<Product[]> {
 **Be clear about what this does and doesn't do:** it's an *assertion*, not a validation. Nothing
 checks the JSON at runtime. If the API returned something else, TypeScript would be none the wiser.
 
+#### So what actually happens if the shape is wrong?
+
+Not a compile error — the compiler believes you. And usually **not a runtime error either**, which is
+what makes this worth understanding. Types in TypeScript are **erased** during compilation. This:
+
+```typescript
+this.http.get<Product[]>(`${API_BASE_URL}/products`)
+```
+
+becomes exactly this in the browser:
+
+```javascript
+this.http.get(API_BASE_URL + "/products")
+```
+
+The `<Product[]>` is gone. There is no `Product` at runtime — `HttpClient` calls `JSON.parse` and
+hands back a plain object, unexamined. Nothing compares it to your interface, because by then the
+interface does not exist.
+
+So if the API renamed `priceCents` to `price`, one of three things happens:
+
+**1. Silent wrong data — the usual case.** `product.priceCents` is `undefined`, `undefined / 100` is
+`NaN`, and the tile renders **`$NaN`**. No exception, nothing in the console. The app runs happily and
+shows nonsense.
+
+**2. A delayed `TypeError`.** If the missing value is used in a way that needs an object —
+`product.description.toUpperCase()` — you get `Cannot read properties of undefined`. That *is* a
+runtime error, but it fires wherever the value is finally touched, potentially several components
+away from the HTTP call. The stack trace points at the symptom, not the cause.
+
+**3. Nothing at all**, if the renamed field happens to be unused.
+
+That is the whole meaning of "assertion, not validation": you are telling the compiler *trust me,
+this is a `Product[]`* — not asking it to check. It obliges completely, then type-checks all your
+downstream code against a promise that may be false.
+
+The contrast with the backend is instructive. `System.Text.Json` deserialising into a `ProductDto`
+genuinely constructs an object at runtime, so a missing JSON property has defined behaviour (it takes
+the type's default). The server has runtime reality behind its types. The browser has none.
+
+**If you want the failure to happen loudly, at the boundary:**
+
+- **Runtime validation** with a library like [zod](https://zod.dev/) or valibot. You declare the
+  schema once, derive the TypeScript type *from* it, and parse each response — a mismatch throws
+  immediately, naming the offending field.
+- **Generate the types from the API's OpenAPI document**, which prevents drift rather than detecting
+  it. That's [exercise 7](#16-exercises).
+
 ### `readonly`, `const`, and template literals
 
 ```typescript
@@ -687,10 +735,13 @@ These are hand-mirrored. `System.Text.Json` camelCases automatically, so `PriceC
 `priceCents`. The C# enum serialises as a string, matching the TS union type.
 
 **Nothing enforces this.** Rename a C# property and the TypeScript still compiles — the field just
-becomes `undefined` at runtime, and you'll see `$NaN` in the UI rather than a build error. Larger
-projects generate the TypeScript from the OpenAPI document to close that gap. Here the surface is
-five endpoints, so it's maintained by hand and deliberately kept in `core/models/` where it's easy to
-find.
+becomes `undefined` at runtime, and you'll see `$NaN` in the UI rather than a build error. This is
+type erasure biting at the system boundary; [section 2](#so-what-actually-happens-if-the-shape-is-wrong)
+walks through why there is no error to catch.
+
+Larger projects generate the TypeScript from the OpenAPI document to close that gap. Here the surface
+is five endpoints, so it's maintained by hand and deliberately kept in `core/models/` where it's easy
+to find — one folder to check when the API changes.
 
 ---
 
