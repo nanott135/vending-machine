@@ -70,8 +70,66 @@ src/
 public/images/                hand-authored SVG artwork
 ```
 
-`core/` holds things used across the app; `features/` holds one screen's components. At this size the
-split is mostly about legibility, but it's the convention Angular projects grow into.
+`core/` holds things used across the app; `features/` holds one screen's components.
+
+### Why `features/` and not `components/`?
+
+A reasonable question, since every folder under `features/vending-machine/` contains a component. The
+two names answer different questions:
+
+- **`components/` groups by what a file *is*.** All components together, all services together, all
+  pipes together — organised by technical type.
+- **`features/` groups by what a file is *for*.** Everything belonging to one area of the app lives
+  together, whatever type it happens to be.
+
+Four reasons this project uses the second:
+
+**Type-based grouping stops scaling.** With six components, `components/` is fine. At eighty, it is
+a flat alphabetical list where `coin-slot` sits beside `invoice-line-item` with nothing to indicate
+they belong to unrelated parts of the app. The folder name has also told you nothing — *everything*
+in an Angular app is a component, so the label doesn't partition anything.
+
+**Features co-locate what changes together.** This is the strongest argument. Working on the vending
+machine means touching its components, its styles, and eventually its own service and routes.
+Type-based grouping scatters those across four directories, so one logical change means four folders
+open at once. A feature folder puts them in one place.
+
+**Features are boundaries you can act on.** A feature can be lazy-loaded behind a route, assigned an
+owner in `CODEOWNERS`, or deleted by deleting its folder. None of that applies to "all components" —
+that isn't a thing which can be loaded, owned, or removed.
+
+**It gives `core/` a meaning.** The two halves define each other:
+
+```
+core/       shared by everything — models, HTTP services, SoundService, image utils
+features/   one folder per area of the app, self-contained
+```
+
+`SoundService` lives in `core/` because the keypad, the coin slot and the container all use it. Under
+a flat `components/`, there would be no natural place for that distinction to live. Larger projects
+often add a third folder, `shared/`, for reusable presentational components; this one hasn't needed
+it.
+
+The structure is meant to grow like this:
+
+```
+features/
+  vending-machine/    <- what exists today
+  admin/              <- restocking, pricing
+  reporting/          <- sales history
+```
+
+Each self-contained, each independently loadable.
+
+**The honest counterpoint:** at this project's size, `components/` would work perfectly well. There is
+one feature and six components, so the feature folder buys structure the app does not yet need. It
+also costs a directory level on every import — `../../../core/models/product.model` is three levels
+of climbing.
+
+Two things justify it regardless. It is the structure the Angular style guide recommends, so a
+developer who knows Angular can open the repository and immediately find things. And converting *to*
+it later means rewriting every import in the app, whereas starting with it costs nothing. It is cheap
+insurance, not a claim that the app is complicated.
 
 ---
 
