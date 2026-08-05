@@ -269,7 +269,10 @@ const MAX_SCALE = 1.6;                            // binding can't be reassigned
 `${API_BASE_URL}/products`                        // template literal with interpolation
 ```
 
-`readonly` prevents reassigning the property, not mutating the object it points at.
+`readonly` prevents reassigning the property, not mutating the object it points at — and `const` is
+the same guarantee at the variable level, so a `const` object is still freely mutable.
+[Appendix 17](#17-appendix-const-readonly-and-actually-preventing-mutation) covers the distinction and
+what to use when you genuinely need to prevent mutation.
 
 ### Decorators
 
