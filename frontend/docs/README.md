@@ -31,6 +31,7 @@ Every code sample is real code from this project. File paths are relative to
 15. [Build tooling](#15-build-tooling)
 16. [Exercises](#16-exercises)
 17. [Appendix: `const`, `readonly`, and actually preventing mutation](#17-appendix-const-readonly-and-actually-preventing-mutation)
+18. [Appendix: what `@angular` means in an import path](#18-appendix-what-angular-means-in-an-import-path)
 
 ---
 
@@ -400,6 +401,12 @@ export class ProductSlot {
   improvement over the old module system: dependencies are declared where they're used.
 - **`templateUrl` / `styleUrl`** — external files. (`template:`/`styles:` inline are also valid; this
   project uses external files throughout for consistency.)
+
+The `@angular` prefix on the first two import lines is an npm scope — a namespace for packages
+published by the Angular team, resolved from `node_modules` rather than from this project. It is
+unrelated to the `@` in `@Component` below it. See
+[appendix 18](#18-appendix-what-angular-means-in-an-import-path) for the full explanation, including
+why `@angular/core` and this project's own `core/` folder are different things.
 
 ### `protected` in a component class
 
@@ -1733,6 +1740,105 @@ say — where only `Object.freeze` actually holds.
   shallow.
 - Don't reach for a deep-freeze utility by default. The runtime cost is real, and for code you own the
   compile-time tools catch the same mistakes earlier.
+
+---
+
+## 18. Appendix: what `@angular` means in an import path
+
+Every component in this project opens with a line like the one in
+[section 4](#4-components):
+
+```typescript
+import { Component, computed, input } from '@angular/core';
+```
+
+The `@angular` part is an **npm scope**. It is not a folder in this project, not a decorator, and not
+an Angular language feature — it is a namespace that npm packages can be published under.
+
+### Scopes are a naming convention npm enforces
+
+A scoped package name has the form `@scope/name`. Everything before the first `/` is the scope;
+everything after is the package. `@angular/core` and `@angular/common` are two *separate* packages
+that happen to share a namespace, in the same way that `angular.dev` and `blog.angular.dev` are
+separate sites sharing a domain.
+
+Scopes exist because the flat npm namespace filled up and became easy to squat. A scope is owned by
+a user or organisation, and only they can publish under it — so a package under `@angular` is
+first-party framework code from the Angular team, whereas an unscoped `angular-something` could be
+published by anyone.
+
+The `@` here is unrelated to the other two `@`s this document uses: `@Component`
+([section 2](#decorators)) is a TypeScript decorator, and `@if` / `@for`
+([section 5](#control-flow)) are Angular template blocks. Three different meanings, one symbol.
+
+### Bare specifiers versus relative paths
+
+[Section 2](#modules) states the rule in one line; this is the mechanics behind it. Look at the
+imports in the `ProductSlot` sample together:
+
+```typescript
+import { CurrencyPipe } from '@angular/common';                  // bare specifier
+import { Component, computed, input } from '@angular/core';      // bare specifier
+import { Product } from '../../../core/models/product.model';    // relative path
+import { productImageFor } from '../../../core/utils/product-image';
+```
+
+A specifier starting with `.` or `..` is **relative** — resolved against the importing file's own
+location on disk. Anything else is a **bare specifier**, looked up in `node_modules`. The leading `@`
+does not change that; it is simply part of the package name. So `@angular/core` resolves to
+`node_modules/@angular/core`, and scoped packages nest one directory deeper than unscoped ones:
+
+```
+node_modules/
+  rxjs/                 <- unscoped: import from 'rxjs'
+  @angular/
+    core/               <- scoped:   import from '@angular/core'
+    common/
+```
+
+Note the collision worth knowing about when reading this document: `@angular/core` and this project's
+own `src/app/core/` folder are unrelated things that share a word. The first is the framework; the
+second is [our own shared code](#the-pieces). This project defines no `paths` aliases in
+`tsconfig.json`, so there is no third category — an import is either relative or a package.
+
+### What's installed here
+
+Bare specifiers only resolve because something put the package on disk. The versions are declared in
+`package.json` and `npm install` fetches them:
+
+```json
+"dependencies": {
+  "@angular/common": "^22.0.0",
+  "@angular/core": "^22.0.0",
+  ...
+}
+```
+
+The app declares six `@angular` packages as runtime dependencies (`common`, `compiler`, `core`,
+`forms`, `platform-browser`, `router`) plus three build-time ones under `devDependencies`
+(`@angular/build`, `@angular/cli`, `@angular/compiler-cli`). The two that appear in nearly every
+file:
+
+- **`@angular/core`** — the framework primitives: `Component`, `signal`, `computed`, `input`,
+  `output`, `effect`, `inject`.
+- **`@angular/common`** — browser-facing pieces built on top of it, such as `CurrencyPipe`.
+
+The framework is split this way so an application only pays for what it imports; a build that never
+uses the router doesn't bundle `@angular/router`.
+
+### Subpaths
+
+Some imports have a third segment:
+
+```typescript
+import { HttpClient } from '@angular/common/http';
+import { provideHttpClientTesting } from '@angular/common/http/testing';
+```
+
+The scope is still only the first segment. This is the package `@angular/common` plus the **subpath**
+`/http` — a named entry point the package publishes in the `exports` field of its own `package.json`.
+It is not a directory path you could navigate to; `node_modules/@angular/common` contains no `http`
+folder. The package decides which subpaths exist, which is also how it keeps its internals private.
 
 ---
 
