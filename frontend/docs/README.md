@@ -32,6 +32,7 @@ Every code sample is real code from this project. File paths are relative to
 16. [Exercises](#16-exercises)
 17. [Appendix: `const`, `readonly`, and actually preventing mutation](#17-appendix-const-readonly-and-actually-preventing-mutation)
 18. [Appendix: what `@angular` means in an import path](#18-appendix-what-angular-means-in-an-import-path)
+19. [Appendix: writable, derived, and why `computed` is read-only](#19-appendix-writable-derived-and-why-computed-is-read-only)
 
 ---
 
@@ -564,6 +565,11 @@ caches otherwise. Read it like any signal: `imageUrl()`.
 
 Use `computed` for anything derivable from other state. It cannot get out of sync, whereas a manually
 maintained copy can.
+
+**A computed cannot be set.** `computed()` returns a read-only `Signal<T>`, not the `WritableSignal<T>`
+that `signal()` gives you, so `.set()` and `.update()` don't exist on it — you change a computed by
+changing the signals it reads. If you need a value that is derived *and* directly writable, that's
+`linkedSignal`. See [appendix 19](#19-appendix-writable-derived-and-why-computed-is-read-only).
 
 ### `input` — data from a parent
 
@@ -1839,6 +1845,117 @@ The scope is still only the first segment. This is the package `@angular/common`
 `/http` — a named entry point the package publishes in the `exports` field of its own `package.json`.
 It is not a directory path you could navigate to; `node_modules/@angular/common` contains no `http`
 folder. The package decides which subpaths exist, which is also how it keeps its internals private.
+
+---
+
+## 19. Appendix: writable, derived, and why `computed` is read-only
+
+[Section 6](#computed) introduces `computed` as a derived signal. A fair follow-up question is how
+you'd then set or update one. The answer is that you can't, and the reason is worth understanding
+because it's the whole point of the API.
+
+### There is no setter, at the type level
+
+```typescript
+// node_modules/@angular/core/types/core.d.ts
+declare function signal<T>(initialValue: T, ...): WritableSignal<T>;
+declare function computed<T>(computation: () => T, options?): Signal<T>;
+```
+
+Two different return types. `Signal<T>` is essentially `(() => T)` plus internal reactive metadata —
+readable, nothing else. `WritableSignal<T>` **extends** it and adds `.set()`, `.update()`, and
+`.asReadonly()`.
+
+So this isn't a runtime restriction you can route around:
+
+```typescript
+protected readonly imageUrl = computed(() => productImageFor(this.product()));
+
+this.imageUrl.set('/images/products/A1-cola.svg');
+// Property 'set' does not exist on type 'Signal<string>'.
+```
+
+The property doesn't exist on the type. `asReadonly()` on a writable signal is the same idea pointed
+the other way: it hands out a `Signal<T>` view so collaborators can read your state without writing
+to it.
+
+### You change a computed by changing what it reads
+
+The only `computed` in this codebase is `features/vending-machine/product-slot/product-slot.ts`:
+
+```typescript
+readonly product = input.required<Product>();
+protected readonly imageUrl = computed(() => productImageFor(this.product()));
+```
+
+`imageUrl` read `product()` while computing, so Angular recorded that dependency. To make `imageUrl`
+produce a different value, the parent rebinds the input:
+
+```html
+<app-product-slot [product]="product" />
+```
+
+The input signal changes → `imageUrl` is marked stale → it recomputes the next time something reads
+it, and caches again. Anywhere else, the same walk applies: find the writable signal upstream and
+`.set()` or `.update()` that.
+
+That indirection is the guarantee. A computed cannot hold a value inconsistent with its inputs,
+because it has no storage of its own that you could desynchronise. A hand-maintained copy kept in
+step by an `effect` can, and eventually does.
+
+### Lazy, not eager
+
+Worth knowing when reasoning about the above: a stale computed doesn't recompute when its dependency
+changes — it recomputes when it is next **read**. If nothing reads it, the work never happens. Two
+consequences: the computation must be pure (no side effects — you cannot rely on when or whether it
+runs), and it is cheap to define computeds that are only sometimes displayed.
+
+### The object-mutation wrinkle
+
+If a computed returns an object, reading it gives you the real object, and mutating that object
+notifies nobody:
+
+```typescript
+const slot = computed(() => ({ code: this.product().code }));
+slot().code = 'D3';   // compiles, changes the cached object, no view updates
+```
+
+Nothing in the reactive graph changed, so no dependent recomputes — and the mutation is lost on the
+next recompute anyway. This is the same class of trap as [appendix 17](#17-appendix-const-readonly-and-actually-preventing-mutation):
+`readonly` on the field stops you rebinding `slot`, not mutating what it returns.
+
+### When you genuinely need derived *and* writable
+
+`linkedSignal` covers that case. It is a real API — `@publicApi 20.0`, available in the
+`@angular/core` 22.x this project installs — and it returns a `WritableSignal` whose value is
+**reset** whenever its source changes:
+
+```typescript
+import { linkedSignal } from '@angular/core';
+
+// seeded from the product list, resets when that list reloads,
+// but can also be set directly
+protected readonly selectedCode = linkedSignal(() => this.products()[0]?.code ?? '');
+
+this.selectedCode.set('C3');   // allowed — this is a WritableSignal
+```
+
+The reset *is* the semantics. It fits a selection or a form field seeded from server data, where a
+local edit should win until fresh data arrives and then give way. If you don't want the local write
+discarded when the source updates, `linkedSignal` is the wrong tool and you want a plain `signal()`.
+
+### Choosing between the three
+
+| | Writable | Stays in sync with sources | Reach for it when |
+|---|---|---|---|
+| `signal()` | Yes | No — you maintain it | The value is owned here and set by user or server events |
+| `computed()` | **No** | Yes, automatically | The value is purely a function of other state |
+| `linkedSignal()` | Yes | Re-seeded on source change | Derived, but locally overridable until the source moves |
+
+Default to `computed` whenever the value is derivable. Reach for `linkedSignal` for the narrow
+override case. Reach for a plain `signal` synchronised by an `effect` essentially never — as
+[section 6](#effect) puts it, effects are for reaching outside the reactive graph, not for computing
+values.
 
 ---
 
