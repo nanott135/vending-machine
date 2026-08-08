@@ -609,6 +609,48 @@ what happens when a coin is inserted; it announces that one was, and the contain
 That's what makes `CoinSlot` reusable and testable in isolation — you can render it, click a button,
 and assert it emitted, with no API and no parent.
 
+### Signals and events are not the same thing
+
+`input()` and `output()` look symmetric, so it's worth being explicit that they are different kinds
+of thing:
+
+- A **signal** is a *value that changes over time*. It always has a current value, and you pull it by
+  calling it.
+- An **event** is a *discrete occurrence*. It happens, whoever is listening is notified, and it's
+  gone. There is no current value to read.
+
+The test: **can you ask what it is right now?** For a signal that question always has an answer; for
+an event it isn't meaningful — "what is the click right now?" means nothing.
+
+`CoinSlot` has one of each:
+
+```typescript
+readonly balanceCents = input.required<number>();   // signal — a value, readable at any time
+readonly insertCoin = output<CoinDenomination>();   // event — fires at a moment
+```
+
+The types say so too. `input()` returns `InputSignal<T>`, which extends `Signal<T>` — an input really
+is a signal, which is why you read it as `product()`. `output()` returns `OutputEmitterRef<T>`, a
+class with `emit()` and `subscribe()` and nothing else. It isn't callable: `this.insertCoin()` does
+not compile. **Inputs are signals; outputs are not.**
+
+So an event is not a special sort of signal, and vice versa. State is modelled with signals;
+occurrences are modelled with events.
+
+Three separate things all get called "events" in casual conversation, and they're worth keeping
+apart:
+
+| | What it is | Seen in |
+|---|---|---|
+| DOM events | The browser's own, nothing to do with Angular | `(click)`, `(keydown)` |
+| Component outputs | A child announcing something upward | `output()` / `.emit()` |
+| Observables | A stream of pushed values — the event model extended over time | `HttpClient`, [section 8](#8-http-and-observables) |
+
+The two models do convert where you need it: `toSignal()` turns an Observable into a signal (which
+means giving it a current value, because a signal must have one), `outputToObservable()` goes the
+other way, and `model()` is a genuine hybrid — `ModelSignal<T>` extends `WritableSignal`,
+`InputSignal` *and* `OutputRef`. This project uses none of the three; they're worth knowing exist.
+
 ### `effect`
 
 ```typescript
@@ -636,8 +678,9 @@ outside the system, which is exactly what the dispenser does: it starts `setTime
 - **No zone.js.** Zoneless is the default from Angular v21 onwards — there is nothing to enable, and
   this project has no zone.js dependency at all. Smaller bundle, and no monkey-patching of browser
   APIs.
-- **Same idea everywhere** — state, derived state, inputs and outputs are all signals, so there's one
-  concept to learn instead of four.
+- **One idea for state** — plain state, derived state, and inputs are all signals, read the same way.
+  Outputs are the deliberate exception, because
+  [they model occurrences rather than values](#signals-and-events-are-not-the-same-thing).
 
 ---
 
