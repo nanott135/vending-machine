@@ -33,6 +33,7 @@ Every code sample is real code from this project. File paths are relative to
 17. [Appendix: `const`, `readonly`, and actually preventing mutation](#17-appendix-const-readonly-and-actually-preventing-mutation)
 18. [Appendix: what `@angular` means in an import path](#18-appendix-what-angular-means-in-an-import-path)
 19. [Appendix: writable, derived, and why `computed` is read-only](#19-appendix-writable-derived-and-why-computed-is-read-only)
+20. [Appendix: error handling across the API boundary](#20-appendix-error-handling-across-the-api-boundary)
 
 ---
 
@@ -836,6 +837,10 @@ down, server crashed, no parseable body — falls through to the generic message
 The `?.status` check is what distinguishes them. `as PurchaseResult | undefined` is a **type
 assertion**: `err.error` is `any`, and this tells the compiler what to treat it as. It does not
 verify anything at runtime, which is exactly why the `if` is needed.
+
+[Appendix 20](#20-appendix-error-handling-across-the-api-boundary) goes further: what an
+`HttpErrorResponse` actually contains, where this discriminator is too loose, what happens on the
+four subscriptions that pass no error callback at all, and where error handling can live instead.
 
 ### The contract is a promise, not a guarantee
 
@@ -2043,6 +2048,173 @@ Default to `computed` whenever the value is derivable. Reach for `linkedSignal` 
 override case. Reach for a plain `signal` synchronised by an `effect` essentially never — as
 [section 6](#effect) puts it, effects are for reaching outside the reactive graph, not for computing
 values.
+
+---
+
+## 20. Appendix: error handling across the API boundary
+
+[Section 8](#error-handling) shows the purchase error callback and explains the shape of it. This is
+the longer version: why a business outcome arrives on the failure channel at all, what is actually in
+the object you're handed, where the current discriminator is thin, and what happens on the four
+subscriptions that have no error callback at all.
+
+### Non-2xx becomes an error notification
+
+An Observable has three channels: `next` (a value), `error` (terminated, badly), `complete`
+(terminated, fine). `HttpClient` maps HTTP onto them by status code, and the rule is blunt:
+
+- **2xx** → `next` with the deserialized body, then `complete`.
+- **anything else** → `error` with an `HttpErrorResponse`. `next` never fires and the stream is over.
+
+There is no third option. So the moment the API chose semantic status codes for business outcomes,
+every one of those outcomes became an "error" as far as RxJS is concerned:
+
+| Outcome | `PurchaseStatus` | HTTP | Callback |
+|---|---|---|---|
+| Vend succeeded | `Success` | 200 | `next` |
+| Unknown code | `ProductNotFound` | 404 | `error` |
+| Sold out | `OutOfStock` | 409 | `error` |
+| Change can't be made | `ChangeUnavailable` | 409 | `error` |
+| Not enough money in | `InsufficientFunds` | 402 | `error` |
+
+Four of the five normal things a vending machine does arrive on the failure path. That's not a bug in
+either half — it's the cost of the API being HTTP-honest, and the front end has to pay it somewhere.
+`PurchaseController.cs` is where the mapping is chosen.
+
+### What `HttpErrorResponse` actually holds
+
+```typescript
+error: (err: HttpErrorResponse) => { ... }
+```
+
+The useful fields are `status` (the number), `statusText`, `url`, `ok` (always `false`), and `error` —
+the body. Note the awkward naming: `err.error` is not a nested error object, it's the **response
+body**, and it comes in three quite different shapes:
+
+| Situation | `err.status` | `err.error` |
+|---|---|---|
+| API returned JSON with a non-2xx code | 402, 404, 409 | the parsed object |
+| Response wasn't parseable JSON | any | the raw string |
+| Request never completed — server down, CORS, offline | **0** | a `ProgressEvent` |
+
+That last row is the one to remember: a network failure gives `status: 0` and no body at all. It is
+the case the generic branch exists for.
+
+For this API the parsed object is a real `PurchaseResult` — captured from the running API:
+
+```json
+// 402 Payment Required
+{"status":"InsufficientFunds","product":{"code":"A1","name":"Cola","priceCents":125,...},
+ "changeDueCents":0,"changeBreakdown":null,"amountStillNeededCents":125}
+```
+
+Everything the UI needs to render the outcome is there, which is exactly why the handler feeds it
+back through `handlePurchaseResult` rather than replacing it with a generic apology.
+
+### The discriminator, and where it is thin
+
+```typescript
+const result = err.error as PurchaseResult | undefined;
+if (result?.status) {
+  this.handlePurchaseResult(result);      // a business outcome
+} else {
+  this.sound.reject();                    // a genuine failure
+  this.message.set('Something went wrong. Please try again.');
+}
+```
+
+Two things are worth separating here. `as PurchaseResult | undefined` is a **type assertion** — it
+changes what the compiler believes and checks nothing at runtime, which is why the `if` has to exist.
+The `if` is the actual test, and what it tests is only "does this object have a truthy `status`
+property".
+
+That is thinner than it looks, because it isn't the only body this API can return. ASP.NET Core's
+`[ApiController]` model validation returns RFC 9110 problem details, which also carry a `status` —
+a number:
+
+```json
+// 400 from POST /api/purchase with a body missing productCode
+{"type":"https://tools.ietf.org/html/rfc9110#section-15.5.1",
+ "title":"One or more validation errors occurred.","status":400,"errors":{...}}
+```
+
+`400` is truthy, so that body passes the check and reaches `handlePurchaseResult`. There, it isn't
+`'Success'` so it buzzes, then the `switch` matches no case and falls straight through — leaving the
+**previous** message on the display. The user gets a rejection noise and stale text instead of
+"Something went wrong."
+
+This is latent rather than live: `Keypad` only ever emits a two-character code, so the front end has
+no way to send a body that fails validation. It is still the wrong discriminator, and tightening it
+costs one array:
+
+```typescript
+const PURCHASE_STATUSES: readonly PurchaseStatus[] = [
+  'Success', 'ProductNotFound', 'OutOfStock', 'InsufficientFunds', 'ChangeUnavailable',
+] as const;
+
+function isPurchaseResult(body: unknown): body is PurchaseResult {
+  return !!body && PURCHASE_STATUSES.includes((body as PurchaseResult).status);
+}
+```
+
+That's a **type guard** — the `body is PurchaseResult` return type tells the compiler that a `true`
+result narrows the type, so you get the same convenience as the assertion plus a check that actually
+runs. Testing for a *known* status rather than any status is what closes the gap.
+
+### The subscriptions with no error callback
+
+The purchase call is the only one that handles errors. The other four don't:
+
+```typescript
+this.productService.getProducts().subscribe((products) => this.products.set(products));
+this.machineService.getBalance().subscribe((balance) => ...);
+this.machineService.insertCoin(denomination).subscribe((balance) => ...);
+this.machineService.returnCoins().subscribe((result) => ...);
+```
+
+A single-argument `subscribe()` registers only `next`. If one of these errors, RxJS has nowhere to
+deliver it, so it is reported as an unhandled error and surfaces in the console. Nothing in the UI
+says anything.
+
+What that looks like in practice: with the API down, `ngOnInit` fires both refreshes, both fail, and
+the machine renders with an empty product grid and a zero balance — indistinguishable from a machine
+that is genuinely empty. Insert a coin and the button clicks, the coin sound plays (it's fired
+locally in `CoinSlot`, before the request), and the balance simply doesn't move.
+
+Whether that's acceptable is a judgement call, not an oversight to fix reflexively. This is a
+single-screen kiosk app where the API is on the same machine; a visible "machine offline" state would
+be better, and it's the kind of thing worth adding deliberately rather than by scattering error
+callbacks.
+
+### The three places error handling can live
+
+- **In the subscriber**, as here. Fine when the handling is specific to that one call, like the
+  purchase result being rescued from the error channel.
+- **In the pipeline with `catchError`**, when the recovery belongs to the request rather than the
+  caller: `getProducts().pipe(catchError(() => of([])))` turns a failure into an empty list and a
+  normal `next`. Related operators: `retry(n)` for transient failures, `timeout(ms)` for slow ones.
+- **In an `HttpInterceptor`**, for anything cross-cutting — logging every failure, attaching a
+  correlation id, showing one global offline banner. This project has none; at five endpoints it
+  wouldn't earn its keep.
+
+A rule of thumb: if two callers would write the same `catch`, move it down into the service or an
+interceptor. If the handling is about *what this screen does next*, keep it in the subscriber.
+
+### A note on the API's side of the choice
+
+The awkwardness traces back to one decision: whether a business outcome deserves a non-2xx code.
+
+- **Semantic codes** (what this API does) — 402/404/409 are meaningful to any HTTP client, cache, or
+  proxy, and the response is self-describing. Cost: the browser logs them as errors, and the client
+  has to rescue results from the failure channel.
+- **200 with a status field** — every business outcome is a success at the transport level, and the
+  `error` callback then means only "something is genuinely broken". Cost: it discards the part of HTTP
+  built to express exactly this, and every client must read the body to know what happened.
+
+Both are defensible and the choice is the API's to make; the
+[backend doc](../../backend/docs/README.md) sets out the reasoning, including why the body is sent
+with the error too. What matters for the front end is that the choice is *known*, because the entire
+shape of `onSelectCode` follows from it.
 
 ---
 
