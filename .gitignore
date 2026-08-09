@@ -489,3 +489,8 @@ dist/
 .angular/
 npm-debug.log*
 *.tsbuildinfo
+
+##
+## Local scratch - never committed
+##
+_ignored/
