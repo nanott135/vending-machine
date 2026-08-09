@@ -11,7 +11,7 @@ import {
 } from '@angular/core';
 import { CoinDenomination } from '../../../core/models/coin.model';
 import { Product } from '../../../core/models/product.model';
-import { PurchaseResult } from '../../../core/models/purchase-result.model';
+import { PurchaseResult, isPurchaseResult } from '../../../core/models/purchase-result.model';
 import { MachineService } from '../../../core/services/machine.service';
 import { ProductService } from '../../../core/services/product.service';
 import { SoundService } from '../../../core/services/sound.service';
@@ -116,10 +116,10 @@ export class VendingMachine implements OnInit {
   onSelectCode(code: string): void {
     this.machineService.purchase(code).subscribe({
       next: (result) => this.handlePurchaseResult(result),
+      // Business outcomes arrive here too - the API answers 402/404/409 with a full result body.
       error: (err: HttpErrorResponse) => {
-        const result = err.error as PurchaseResult | undefined;
-        if (result?.status) {
-          this.handlePurchaseResult(result);
+        if (isPurchaseResult(err.error)) {
+          this.handlePurchaseResult(err.error);
         } else {
           this.sound.reject();
           this.message.set('Something went wrong. Please try again.');
