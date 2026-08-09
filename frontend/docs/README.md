@@ -812,9 +812,8 @@ onSelectCode(code: string): void {
   this.machineService.purchase(code).subscribe({
     next: (result) => this.handlePurchaseResult(result),
     error: (err: HttpErrorResponse) => {
-      const result = err.error as PurchaseResult | undefined;
-      if (result?.status) {
-        this.handlePurchaseResult(result);
+      if (isPurchaseResult(err.error)) {
+        this.handlePurchaseResult(err.error);
       } else {
         this.sound.reject();
         this.message.set('Something went wrong. Please try again.');
@@ -834,9 +833,23 @@ So the handler digs the body out of `err.error` and, if it looks like a real res
 through the exact same `handlePurchaseResult` path as success**. Only a genuine failure — network
 down, server crashed, no parseable body — falls through to the generic message.
 
-The `?.status` check is what distinguishes them. `as PurchaseResult | undefined` is a **type
-assertion**: `err.error` is `any`, and this tells the compiler what to treat it as. It does not
-verify anything at runtime, which is exactly why the `if` is needed.
+`isPurchaseResult` is what distinguishes them — a **type guard** living beside the interface in
+`core/models/purchase-result.model.ts`:
+
+```typescript
+export function isPurchaseResult(body: unknown): body is PurchaseResult {
+  return (
+    typeof body === 'object' && body !== null &&
+    PURCHASE_STATUSES.includes((body as PurchaseResult).status)
+  );
+}
+```
+
+The `body is PurchaseResult` return type is the interesting part: TypeScript narrows `err.error` to a
+`PurchaseResult` inside the `if`, so the branch is type-safe without a cast. It has to be a real
+runtime check rather than an `as` assertion, because an assertion only changes what the compiler
+believes and verifies nothing. Testing for a **known** status rather than merely a present one also
+matters, for reasons [appendix 20](#the-discriminator-and-why-it-tests-for-a-known-status) goes into.
 
 [Appendix 20](#20-appendix-error-handling-across-the-api-boundary) goes further: what an
 `HttpErrorResponse` actually contains, where this discriminator is too loose, what happens on the
@@ -1666,8 +1679,10 @@ thing only a timer test can catch.
 
 Worth being explicit:
 
-- **No HTTP-level tests.** `HttpTestingController` would let you assert request URLs and simulate
-  error responses; the container's error-handling branch is currently unverified.
+- **HTTP coverage is thin.** `VendingMachine` uses `HttpTestingController` to flush a 402 and a
+  malformed error body, which pins the branch described in
+  [appendix 20](#the-discriminator-and-why-it-tests-for-a-known-status). The happy path, the other
+  four statuses, and the coin endpoints are not covered.
 - **Audio output is never verified** — only that calls don't throw. The sounds in this project were
   checked by instrumenting `AudioContext` in a real browser and recording scheduled frequencies,
   which is a useful technique when you can't assert on sound itself.
@@ -2055,8 +2070,8 @@ values.
 
 [Section 8](#error-handling) shows the purchase error callback and explains the shape of it. This is
 the longer version: why a business outcome arrives on the failure channel at all, what is actually in
-the object you're handed, where the current discriminator is thin, and what happens on the four
-subscriptions that have no error callback at all.
+the object you're handed, why the guard that sorts results from failures has to test for a *known*
+status, and what happens on the four subscriptions that have no error callback at all.
 
 ### Non-2xx becomes an error notification
 
@@ -2111,26 +2126,26 @@ For this API the parsed object is a real `PurchaseResult` — captured from the 
 Everything the UI needs to render the outcome is there, which is exactly why the handler feeds it
 back through `handlePurchaseResult` rather than replacing it with a generic apology.
 
-### The discriminator, and where it is thin
+### The discriminator, and why it tests for a known status
+
+Splitting results from failures is `isPurchaseResult`, in `core/models/purchase-result.model.ts`
+beside the interface it narrows to:
 
 ```typescript
-const result = err.error as PurchaseResult | undefined;
-if (result?.status) {
-  this.handlePurchaseResult(result);      // a business outcome
-} else {
-  this.sound.reject();                    // a genuine failure
-  this.message.set('Something went wrong. Please try again.');
+export function isPurchaseResult(body: unknown): body is PurchaseResult {
+  return (
+    typeof body === 'object' && body !== null &&
+    PURCHASE_STATUSES.includes((body as PurchaseResult).status)
+  );
 }
 ```
 
-Two things are worth separating here. `as PurchaseResult | undefined` is a **type assertion** — it
-changes what the compiler believes and checks nothing at runtime, which is why the `if` has to exist.
-The `if` is the actual test, and what it tests is only "does this object have a truthy `status`
-property".
+The obvious cheaper version — `if (err.error?.status)`, "does the body have a status at all" — is the
+one to avoid, and the reason is worth seeing, because it's a good example of how a boundary check can
+look sufficient and not be.
 
-That is thinner than it looks, because it isn't the only body this API can return. ASP.NET Core's
-`[ApiController]` model validation returns RFC 9110 problem details, which also carry a `status` —
-a number:
+`PurchaseResult` is not the only body this API can return. ASP.NET Core's `[ApiController]` model
+validation answers with RFC 9110 problem details, which carry a `status` of their own — a number:
 
 ```json
 // 400 from POST /api/purchase with a body missing productCode
@@ -2138,28 +2153,33 @@ a number:
  "title":"One or more validation errors occurred.","status":400,"errors":{...}}
 ```
 
-`400` is truthy, so that body passes the check and reaches `handlePurchaseResult`. There, it isn't
-`'Success'` so it buzzes, then the `switch` matches no case and falls straight through — leaving the
-**previous** message on the display. The user gets a rejection noise and stale text instead of
-"Something went wrong."
+`400` is truthy. Under the loose check that body would pass as a result and reach
+`handlePurchaseResult`, where it isn't `'Success'` so it buzzes, then matches no case in the `switch`
+and falls straight through — leaving the **previous** message on the display. A rejection noise and
+stale text, where the user should have got "Something went wrong."
 
-This is latent rather than live: `Keypad` only ever emits a two-character code, so the front end has
-no way to send a body that fails validation. It is still the wrong discriminator, and tightening it
-costs one array:
+Testing membership of `PURCHASE_STATUSES` is what closes that. And because the union is derived from
+that same array —
 
 ```typescript
-const PURCHASE_STATUSES: readonly PurchaseStatus[] = [
-  'Success', 'ProductNotFound', 'OutOfStock', 'InsufficientFunds', 'ChangeUnavailable',
-] as const;
-
-function isPurchaseResult(body: unknown): body is PurchaseResult {
-  return !!body && PURCHASE_STATUSES.includes((body as PurchaseResult).status);
-}
+export const PURCHASE_STATUSES = ['Success', 'ProductNotFound', ...] as const;
+export type PurchaseStatus = (typeof PURCHASE_STATUSES)[number];
 ```
 
-That's a **type guard** — the `body is PurchaseResult` return type tells the compiler that a `true`
-result narrows the type, so you get the same convenience as the assertion plus a check that actually
-runs. Testing for a *known* status rather than any status is what closes the gap.
+— the compile-time type and the runtime list cannot drift apart. Adding a status to the array adds it
+to the union; there is no second place to remember.
+
+The other half of the guard is its return type. `body is PurchaseResult` is a **type predicate**: a
+`true` return narrows the argument's type for the compiler, so inside the `if` you can use
+`err.error` as a `PurchaseResult` with no cast. That's the ergonomic part. The runtime check is the
+substantive part — an `as` assertion would narrow the type just as well and verify nothing, which is
+exactly the failure mode [section 2](#so-what-actually-happens-if-the-shape-is-wrong) describes at
+the boundary.
+
+Worth being clear about the scope of the guard: it checks the discriminant, not the whole shape. A
+body claiming `status: 'Success'` with a malformed `product` still passes. Validating every field
+would mean a schema validator (Zod and similar), which is the right call when the API is not one you
+control — here the same repository owns both ends.
 
 ### The subscriptions with no error callback
 
