@@ -705,6 +705,50 @@ export class ProductService {
 - **`inject(HttpClient)`** asks the injector for the dependency. (Constructor parameter injection is
   the older equivalent; `inject()` works in field initialisers and is now preferred.)
 
+### Lazy creation and tree shaking are different things
+
+That second bullet names two mechanisms in one breath, and they happen at different times:
+
+| | When | What it decides |
+|---|---|---|
+| Tree shaking | Build time | Whether the code is in the bundle at all |
+| Lazy creation | Runtime | When the instance is constructed, given that it is |
+
+**Tree shaking** is the bundler's dead-code elimination ([section 15](#15-build-tooling)). It starts
+at `src/main.ts`, follows every static `import` and reference to find what is reachable, and drops
+the rest. It works because ES modules are statically analysable — `import { X } from 'y'` can be
+resolved without running the program. "Tree-shaken away entirely" means the class does not reach the
+browser: not shipped-but-unregistered, absent.
+
+What makes a service droppable is where its registration lives. `providedIn: 'root'` puts it **on the
+class itself**, so the only references to `ProductService` anywhere are the places that actually ask
+for it:
+
+```typescript
+private readonly productService = inject(ProductService);
+```
+
+Delete every such line and nothing reachable points at the class, so it goes. Compare the older
+`NgModule` style:
+
+```typescript
+@NgModule({ providers: [ProductService] })   // this array references the class
+```
+
+That list is reachable from the entry point, so it kept the service alive whether or not anything
+injected it — unused services shipped regardless. `providedIn: 'root'` inverts the direction of the
+reference, and that inversion is what makes dropping it possible.
+
+**Lazy creation** is the separate runtime half: the class *is* in the bundle, and Angular waits until
+something first injects it before calling `new`. It buys nothing in this app — all three services are
+injected by components that render immediately, so all three are constructed at startup — but it
+matters for a service only reached on a rare path, which then costs nothing until that path is taken.
+
+`SoundService` is worth looking at because it has a *second* kind of laziness that is easy to confuse
+with this one. Angular constructs the service as soon as `CoinSlot` renders, yet its `AudioContext`
+is still deferred until the first sound. That deferral is hand-written inside the service
+([section 11](#the-audiocontext)) and required by the browser, not something DI arranged.
+
 ### Why singleton matters here
 
 `SoundService` being a single shared instance is not incidental. It holds one `AudioContext` and one
