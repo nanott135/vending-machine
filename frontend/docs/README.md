@@ -1109,15 +1109,82 @@ this.dispensed.set({ id: ++this.dispenseCount, product: result.product });
 }
 ```
 
-An `@for` over a zero-or-one-element array looks odd next to a plain `@if`. It's deliberate.
+An `@for` over a zero-or-one-element array looks odd next to a plain `@if`, and the `id` looks like
+bookkeeping nobody asked for. Both exist for one reason, which takes three separate facts to see.
 
-A CSS animation runs when an element is **created**. With `@if`, buying the same product twice would
-keep the same `<img>` in place — Angular would see no change worth acting on, and the drop animation
-would not replay. Tracking by an incrementing id guarantees a *different* identity each vend, so
-Angular destroys the old element and creates a new one, and the animation restarts.
+**The goal:** buy a Cola, watch it drop into the tray. Buy a second Cola straight after, and watch it
+drop again.
 
-`current()!` uses the **non-null assertion** `!` — the ternary has already established it isn't null,
-but TypeScript can't infer that across the two calls.
+**Fact 1 — the drop is a CSS animation, and CSS animations run on element creation.** The item has no
+JavaScript animating it. It has this, in `dispenser-bin.scss`:
+
+```scss
+.bin__item {
+  animation:
+    drop 0.85s cubic-bezier(0.33, 0, 0.4, 1) both,
+    fade-away 0.7s ease-in 2.3s forwards;
+}
+```
+
+The browser starts those the moment an element carrying that class enters the page, and then it is
+done. Changing an attribute later — swapping `src` from Cola to Root Beer — does not restart
+anything. CSS has no "play it again"; an animation is tied to the element, and it plays when the
+element appears.
+
+**Fact 2 — Angular reuses DOM elements wherever it can.** That is the whole point of its rendering
+model: on each update it works out the smallest change and applies it in place, rather than throwing
+away the page and rebuilding it. Reuse is normally exactly what you want. Here it is the problem,
+because a reused `<img>` is not a *new* element, so by fact 1 the animation does not replay.
+
+**Fact 3 — `track` is how you tell Angular what counts as "the same element".** This is the lever.
+For each item in an `@for`, Angular computes the `track` expression and uses it as that item's
+identity across updates:
+
+- **Same key as last time** → same DOM element kept, bindings updated in place.
+- **Key it hasn't seen** → a brand new element created (and the old one destroyed).
+
+Putting the three together: to replay the animation you need a *new element*, to get a new element
+you need a *new key*, and so the key must differ on every single vend — including a repeat of the
+product just bought. That is all the `id` is. `++this.dispenseCount` hands out 1, 2, 3, … so no two
+vends ever share a key:
+
+```typescript
+this.dispensed.set({ id: ++this.dispenseCount, product: result.product });
+```
+
+### Why the alternatives don't work
+
+**Why not `@if (current())`?** An `@if` has no key — its only question is "true or false". Buy a
+second product while the first is still on screen (it stays for 3.15s) and the condition was already
+true and stays true, so Angular keeps the element and just updates `[src]`. You'd see the first
+product's picture silently turn into the second one, mid-fade, with no drop at all.
+
+**Why not `track dispensed.product.code`?** Closer, and it works for *different* products — `A1` then
+`B2` are different keys, so you get a new element. But buy the same Cola twice and the key is `A1`
+both times, so the element is reused and the second drop never plays. The exact case the feature is
+for is the one it fails.
+
+**Why `@for` at all, for a list that is never longer than one?** Because `track` only exists on
+`@for`. The zero-or-one array is a way of saying "here is one element, and here is its identity" —
+which `@if` cannot express. The oddness buys the identity.
+
+### The same mechanism, the opposite goal
+
+This is worth holding next to [section 5](#control-flow), where the product grid tracks by
+`product.code`:
+
+| | Key | Result on update | Why that's wanted |
+|---|---|---|---|
+| `ProductGrid` | `product.code` | Tiles reused, quantities patched in | No flicker, no restarted CSS, nothing loses focus |
+| `DispenserBin` | `dispensed.id` | Element destroyed and recreated | The drop animation replays |
+
+Same feature, opposite intent. The grid wants stability, so it keys by something that stays the same;
+the bin wants a fresh element, so it keys by something that never does. Once you read `track` as
+"what makes this element *the same element*", both fall out of the same rule.
+
+(One more small thing in that template: `current()!` uses the **non-null assertion** `!`. The ternary
+has already established the value isn't null, but each `current()` is a separate function call and
+TypeScript can't carry the knowledge from one to the next.)
 
 ### The effect and its timers
 
