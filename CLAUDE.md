@@ -96,8 +96,8 @@ holding the balance/coins, keypad, message display and dispenser bin, inside a c
 **Fit-to-viewport scaling** - the whole cabinet is scaled uniformly so it always fits without
 scrolling (`html, body { overflow: hidden }`). `VendingMachine` computes the factor from the
 cabinet's `offsetWidth/offsetHeight` - which ignore transforms, so the scale can't feed back into
-its own input - and recomputes on window resize and via a `ResizeObserver`. Two things are load
-bearing and easy to break:
+its own input - and recomputes on window resize and via a `ResizeObserver`. Two things look
+arbitrary but are not - change either and the cabinet stops fitting the viewport:
 - centring is `scale()` applied **before** `translate(-50%, -50%)` on an absolutely positioned box,
   so the translate shifts by half the *scaled* size. Flex and grid centring both top-left align a
   box larger than its container, which leaves the cabinet hanging off the edge once scaled;

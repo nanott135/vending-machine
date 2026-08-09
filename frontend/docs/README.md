@@ -1294,9 +1294,10 @@ constructor() {
 Reading `this.item()` registers the dependency, so the effect re-runs whenever the parent sets a new
 item.
 
-**`clearTimers()` first is load-bearing.** Buy something at t=0 and something else at t=2s: without
-cancelling, the first purchase's removal timer would still fire at t=3.15s and wipe out the *second*
-product about a second after it arrived. There's a test for exactly this.
+**Don't drop or move the `clearTimers()` call — it has to run before the new timers are set.** Buy
+something at t=0 and something else at t=2s: without cancelling, the first purchase's removal timer
+would still fire at t=3.15s and wipe out the *second* product about a second after it arrived.
+There's a test for exactly this.
 
 **`destroyRef.onDestroy`** cancels pending timers when the component is destroyed. A `setTimeout`
 holds a reference to its closure — and through it, the component. Leaving them pending leaks the
