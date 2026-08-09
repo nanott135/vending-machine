@@ -3,7 +3,9 @@
 A working vending machine: insert coins, punch a slot code, watch the product drop into the tray and
 your change come back. Angular front end, ASP.NET Core Web API, SQL Server persistence.
 
-<!-- Screenshot goes here: ![The vending machine](docs/screenshot.png) -->
+![The vending machine: a 3x4 product grid with two slots dark and lit out-of-stock, a console strip
+holding the balance readout, coin buttons, keypad and message display, and an Orange Soda sitting in
+the dispenser tray after a purchase](docs/screenshot.png)
 
 It exists as a study of **agent-assisted development**. The code was written primarily by
 [Claude Code](https://claude.com/claude-code) under direction, on a problem with enough real
