@@ -471,9 +471,10 @@ builder.Services.AddControllers()
 `AddControllers()` registers the MVC machinery that discovers controller classes and routes requests
 to them.
 
-`JsonStringEnumConverter` is small but load-bearing. By default .NET serialises an enum as its
-**number**, so `CoinDenomination.Quarter` would appear in JSON as `25`. With this converter it
-appears as `"Quarter"`. That's why the TypeScript client can declare:
+`JsonStringEnumConverter` is one line of setup that the front end's type safety depends on — remove
+it and the two halves stop agreeing, with nothing failing at build time to tell you. By default .NET
+serialises an enum as its **number**, so `CoinDenomination.Quarter` would appear in JSON as `25`.
+With this converter it appears as `"Quarter"`. That's why the TypeScript client can declare:
 
 ```typescript
 export type CoinDenomination = 'Nickel' | 'Dime' | 'Quarter' | 'Dollar';
@@ -640,7 +641,7 @@ their own) and hands back a finished object.
 | **Scoped** | One per HTTP request | `DbContext`, `IVendingMachineService` |
 | **Singleton** | One for the whole application | `IMachineStateService`, `IChangeMakingService` |
 
-These choices are **deliberate and each is load-bearing**:
+These choices are **deliberate — changing any one of them breaks something**:
 
 **`IMachineStateService` is a singleton** because it *is* the machine's physical state. A real
 vending machine has one coin slot with one pending transaction. If it were scoped, each HTTP request

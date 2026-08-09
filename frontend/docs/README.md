@@ -31,6 +31,9 @@ Every code sample is real code from this project. File paths are relative to
 15. [Build tooling](#15-build-tooling)
 16. [Exercises](#16-exercises)
 17. [Appendix: `const`, `readonly`, and actually preventing mutation](#17-appendix-const-readonly-and-actually-preventing-mutation)
+18. [Appendix: what `@angular` means in an import path](#18-appendix-what-angular-means-in-an-import-path)
+19. [Appendix: writable, derived, and why `computed` is read-only](#19-appendix-writable-derived-and-why-computed-is-read-only)
+20. [Appendix: error handling across the API boundary](#20-appendix-error-handling-across-the-api-boundary)
 
 ---
 
@@ -401,6 +404,12 @@ export class ProductSlot {
 - **`templateUrl` / `styleUrl`** — external files. (`template:`/`styles:` inline are also valid; this
   project uses external files throughout for consistency.)
 
+The `@angular` prefix on the first two import lines is an npm scope — a namespace for packages
+published by the Angular team, resolved from `node_modules` rather than from this project. It is
+unrelated to the `@` in `@Component` below it. See
+[appendix 18](#18-appendix-what-angular-means-in-an-import-path) for the full explanation, including
+why `@angular/core` and this project's own `core/` folder are different things.
+
 ### `protected` in a component class
 
 ```typescript
@@ -558,6 +567,11 @@ caches otherwise. Read it like any signal: `imageUrl()`.
 Use `computed` for anything derivable from other state. It cannot get out of sync, whereas a manually
 maintained copy can.
 
+**A computed cannot be set.** `computed()` returns a read-only `Signal<T>`, not the `WritableSignal<T>`
+that `signal()` gives you, so `.set()` and `.update()` don't exist on it — you change a computed by
+changing the signals it reads. If you need a value that is derived *and* directly writable, that's
+`linkedSignal`. See [appendix 19](#19-appendix-writable-derived-and-why-computed-is-read-only).
+
 ### `input` — data from a parent
 
 ```typescript
@@ -596,6 +610,48 @@ what happens when a coin is inserted; it announces that one was, and the contain
 That's what makes `CoinSlot` reusable and testable in isolation — you can render it, click a button,
 and assert it emitted, with no API and no parent.
 
+### Signals and events are not the same thing
+
+`input()` and `output()` look symmetric, so it's worth being explicit that they are different kinds
+of thing:
+
+- A **signal** is a *value that changes over time*. It always has a current value, and you pull it by
+  calling it.
+- An **event** is a *discrete occurrence*. It happens, whoever is listening is notified, and it's
+  gone. There is no current value to read.
+
+The test: **can you ask what it is right now?** For a signal that question always has an answer; for
+an event it isn't meaningful — "what is the click right now?" means nothing.
+
+`CoinSlot` has one of each:
+
+```typescript
+readonly balanceCents = input.required<number>();   // signal — a value, readable at any time
+readonly insertCoin = output<CoinDenomination>();   // event — fires at a moment
+```
+
+The types say so too. `input()` returns `InputSignal<T>`, which extends `Signal<T>` — an input really
+is a signal, which is why you read it as `product()`. `output()` returns `OutputEmitterRef<T>`, a
+class with `emit()` and `subscribe()` and nothing else. It isn't callable: `this.insertCoin()` does
+not compile. **Inputs are signals; outputs are not.**
+
+So an event is not a special sort of signal, and vice versa. State is modelled with signals;
+occurrences are modelled with events.
+
+Three separate things all get called "events" in casual conversation, and they're worth keeping
+apart:
+
+| | What it is | Seen in |
+|---|---|---|
+| DOM events | The browser's own, nothing to do with Angular | `(click)`, `(keydown)` |
+| Component outputs | A child announcing something upward | `output()` / `.emit()` |
+| Observables | A stream of pushed values — the event model extended over time | `HttpClient`, [section 8](#8-http-and-observables) |
+
+The two models do convert where you need it: `toSignal()` turns an Observable into a signal (which
+means giving it a current value, because a signal must have one), `outputToObservable()` goes the
+other way, and `model()` is a genuine hybrid — `ModelSignal<T>` extends `WritableSignal`,
+`InputSignal` *and* `OutputRef`. This project uses none of the three; they're worth knowing exist.
+
 ### `effect`
 
 ```typescript
@@ -623,8 +679,9 @@ outside the system, which is exactly what the dispenser does: it starts `setTime
 - **No zone.js.** Zoneless is the default from Angular v21 onwards — there is nothing to enable, and
   this project has no zone.js dependency at all. Smaller bundle, and no monkey-patching of browser
   APIs.
-- **Same idea everywhere** — state, derived state, inputs and outputs are all signals, so there's one
-  concept to learn instead of four.
+- **One idea for state** — plain state, derived state, and inputs are all signals, read the same way.
+  Outputs are the deliberate exception, because
+  [they model occurrences rather than values](#signals-and-events-are-not-the-same-thing).
 
 ---
 
@@ -648,6 +705,50 @@ export class ProductService {
   use, and tree-shaken away entirely if nothing injects it.
 - **`inject(HttpClient)`** asks the injector for the dependency. (Constructor parameter injection is
   the older equivalent; `inject()` works in field initialisers and is now preferred.)
+
+### Lazy creation and tree shaking are different things
+
+That second bullet names two mechanisms in one breath, and they happen at different times:
+
+| | When | What it decides |
+|---|---|---|
+| Tree shaking | Build time | Whether the code is in the bundle at all |
+| Lazy creation | Runtime | When the instance is constructed, given that it is |
+
+**Tree shaking** is the bundler's dead-code elimination ([section 15](#15-build-tooling)). It starts
+at `src/main.ts`, follows every static `import` and reference to find what is reachable, and drops
+the rest. It works because ES modules are statically analysable — `import { X } from 'y'` can be
+resolved without running the program. "Tree-shaken away entirely" means the class does not reach the
+browser: not shipped-but-unregistered, absent.
+
+What makes a service droppable is where its registration lives. `providedIn: 'root'` puts it **on the
+class itself**, so the only references to `ProductService` anywhere are the places that actually ask
+for it:
+
+```typescript
+private readonly productService = inject(ProductService);
+```
+
+Delete every such line and nothing reachable points at the class, so it goes. Compare the older
+`NgModule` style:
+
+```typescript
+@NgModule({ providers: [ProductService] })   // this array references the class
+```
+
+That list is reachable from the entry point, so it kept the service alive whether or not anything
+injected it — unused services shipped regardless. `providedIn: 'root'` inverts the direction of the
+reference, and that inversion is what makes dropping it possible.
+
+**Lazy creation** is the separate runtime half: the class *is* in the bundle, and Angular waits until
+something first injects it before calling `new`. It buys nothing in this app — all three services are
+injected by components that render immediately, so all three are constructed at startup — but it
+matters for a service only reached on a rare path, which then costs nothing until that path is taken.
+
+`SoundService` is worth looking at because it has a *second* kind of laziness that is easy to confuse
+with this one. Angular constructs the service as soon as `CoinSlot` renders, yet its `AudioContext`
+is still deferred until the first sound. That deferral is hand-written inside the service
+([section 11](#the-audiocontext)) and required by the browser, not something DI arranged.
 
 ### Why singleton matters here
 
@@ -711,9 +812,8 @@ onSelectCode(code: string): void {
   this.machineService.purchase(code).subscribe({
     next: (result) => this.handlePurchaseResult(result),
     error: (err: HttpErrorResponse) => {
-      const result = err.error as PurchaseResult | undefined;
-      if (result?.status) {
-        this.handlePurchaseResult(result);
+      if (isPurchaseResult(err.error)) {
+        this.handlePurchaseResult(err.error);
       } else {
         this.sound.reject();
         this.message.set('Something went wrong. Please try again.');
@@ -733,9 +833,27 @@ So the handler digs the body out of `err.error` and, if it looks like a real res
 through the exact same `handlePurchaseResult` path as success**. Only a genuine failure — network
 down, server crashed, no parseable body — falls through to the generic message.
 
-The `?.status` check is what distinguishes them. `as PurchaseResult | undefined` is a **type
-assertion**: `err.error` is `any`, and this tells the compiler what to treat it as. It does not
-verify anything at runtime, which is exactly why the `if` is needed.
+`isPurchaseResult` is what distinguishes them — a **type guard** living beside the interface in
+`core/models/purchase-result.model.ts`:
+
+```typescript
+export function isPurchaseResult(body: unknown): body is PurchaseResult {
+  return (
+    typeof body === 'object' && body !== null &&
+    PURCHASE_STATUSES.includes((body as PurchaseResult).status)
+  );
+}
+```
+
+The `body is PurchaseResult` return type is the interesting part: TypeScript narrows `err.error` to a
+`PurchaseResult` inside the `if`, so the branch is type-safe without a cast. It has to be a real
+runtime check rather than an `as` assertion, because an assertion only changes what the compiler
+believes and verifies nothing. Testing for a **known** status rather than merely a present one also
+matters, for reasons [appendix 20](#the-discriminator-and-why-it-tests-for-a-known-status) goes into.
+
+[Appendix 20](#20-appendix-error-handling-across-the-api-boundary) goes further: what an
+`HttpErrorResponse` actually contains, where this discriminator is too loose, what happens on the
+four subscriptions that pass no error callback at all, and where error handling can live instead.
 
 ### The contract is a promise, not a guarantee
 
@@ -910,11 +1028,63 @@ the server means adding a case here — the type system won't force it (an unhan
 through), which is a known soft spot.
 
 **`refreshProducts()` after a success** re-fetches the grid so quantities and out-of-stock lights
-update. The server is treated as the source of truth rather than decrementing locally — slower, but
-it cannot drift.
+update. The server is treated as the source of truth rather than decrementing locally — one extra
+round trip, in exchange for a UI that cannot drift from it. That trade-off is worth unpacking; see
+below.
 
 `refreshBalance()` runs on *every* path, including failures, because a rejected purchase leaves the
 balance intact and the display must reflect that.
+
+### Refetch, predict, or use the response
+
+There are three ways to get the grid to show one fewer Cola, and the choice between them is a
+recurring one in any app backed by an API.
+
+**Refetch** is what the code does: ask the server again and replace what you have.
+
+```typescript
+this.productService.getProducts().subscribe((products) => this.products.set(products));
+```
+
+**Predict locally** — the "decrementing locally" alternative — skips the request and computes the new
+state client-side:
+
+```typescript
+this.products.update((list) =>
+  list.map((p) => (p.code === result.product!.code ? { ...p, quantity: p.quantity - 1 } : p)),
+);
+```
+
+Faster, and already subtly wrong. It updates `quantity` but not `isOutOfStock`, so buying the last
+Root Beer would leave the tile lit as in stock at zero. `isOutOfStock` is *derived*, and the rule
+lives on the server:
+
+```csharp
+// VendingMachineService.ToDto
+new(product.Code, product.Name, product.PriceCents, product.Quantity, product.Quantity == 0, ...)
+```
+
+Fixing the prediction means re-implementing that rule in TypeScript, and now one business rule exists
+in two languages with nothing checking that they agree. Change it server-side — out of stock at a
+reserve threshold rather than zero, say — and the UI keeps quietly using the old one. **That is what
+"drift" means here: not a synchronisation bug, a duplicated-logic bug.**
+
+The general technique is **optimistic UI** — apply the predicted result immediately, reconcile when
+the response lands, roll back if it disagrees. Done properly it needs all three parts, which is real
+machinery. It earns that cost when the round trip actually hurts: high latency, expensive refetches,
+high-frequency interactions, offline support. None of which applies to a kiosk talking to localhost
+about twelve rows of JSON, which is why refetch is the right call here.
+
+**Use the response.** There is a third option this code leaves unused, and it's arguably the best of
+the three. The purchase response already carries the answer — `ToDto` runs *after* the decrement and
+the commit, so `result.product` holds the new quantity and the server's own `isOutOfStock`. Patching
+that one product into the grid costs no extra round trip and duplicates no logic, because the server
+still decided both values. The catch is scope: it refreshes only the product you bought, so a change
+to any other row waits for the next full fetch. Irrelevant for one machine and one user; relevant the
+moment there are two.
+
+The same reasoning already governs the balance in [section 8](#subscribing) — `insertCoin` sets
+`balanceCents` from the server's answer rather than adding 25 to it locally.
 
 ---
 
@@ -939,15 +1109,164 @@ this.dispensed.set({ id: ++this.dispenseCount, product: result.product });
 }
 ```
 
-An `@for` over a zero-or-one-element array looks odd next to a plain `@if`. It's deliberate.
+An `@for` over a zero-or-one-element array looks odd next to a plain `@if`, and the `id` looks like
+bookkeeping nobody asked for. Both exist for one reason, which takes three separate facts to see.
 
-A CSS animation runs when an element is **created**. With `@if`, buying the same product twice would
-keep the same `<img>` in place — Angular would see no change worth acting on, and the drop animation
-would not replay. Tracking by an incrementing id guarantees a *different* identity each vend, so
-Angular destroys the old element and creates a new one, and the animation restarts.
+**The goal:** buy a Cola, watch it drop into the tray. Buy a second Cola straight after, and watch it
+drop again.
 
-`current()!` uses the **non-null assertion** `!` — the ternary has already established it isn't null,
-but TypeScript can't infer that across the two calls.
+**Fact 1 — the drop is a CSS animation, and CSS animations run on element creation.** The item has no
+JavaScript animating it. It has this, in `dispenser-bin.scss`:
+
+```scss
+.bin__item {
+  animation:
+    drop 0.85s cubic-bezier(0.33, 0, 0.4, 1) both,
+    fade-away 0.7s ease-in 2.3s forwards;
+}
+```
+
+The browser starts those the moment an element carrying that class enters the page, and then it is
+done. Changing an attribute later — swapping `src` from Cola to Root Beer — does not restart
+anything. CSS has no "play it again"; an animation is tied to the element, and it plays when the
+element appears.
+
+**Fact 2 — Angular reuses DOM elements wherever it can.** That is the whole point of its rendering
+model: on each update it works out the smallest change and applies it in place, rather than throwing
+away the page and rebuilding it. Reuse is normally exactly what you want. Here it is the problem,
+because a reused `<img>` is not a *new* element, so by fact 1 the animation does not replay.
+
+**Fact 3 — `track` is how you tell Angular what counts as "the same element".** This is the lever.
+For each item in an `@for`, Angular computes the `track` expression and uses it as that item's
+identity across updates:
+
+- **Same key as last time** → same DOM element kept, bindings updated in place.
+- **Key it hasn't seen** → a brand new element created (and the old one destroyed).
+
+Putting the three together: to replay the animation you need a *new element*, to get a new element
+you need a *new key*, and so the key must differ on every single vend — including a repeat of the
+product just bought. That is all the `id` is. `++this.dispenseCount` hands out 1, 2, 3, … so no two
+vends ever share a key:
+
+```typescript
+this.dispensed.set({ id: ++this.dispenseCount, product: result.product });
+```
+
+### Why the alternatives don't work
+
+Each of these is what you'd naturally write first. Seeing them in full is the quickest way to see
+what the `id` is buying, so each one below is the complete version of the same three files.
+
+**Alternative A — a plain `@if`.** Without the need for a key, the `id` has nothing to do, so it goes
+away and the whole chain gets simpler. That's what makes this the tempting one:
+
+```typescript
+// dispenser-bin.ts — the item is just a Product now
+readonly item = input<Product | null>(null);
+protected readonly current = signal<Product | null>(null);
+```
+
+```typescript
+// vending-machine.ts — no counter to maintain
+this.dispensed.set(result.product);
+```
+
+```html
+<!-- dispenser-bin.html -->
+<div class="bin__well">
+  @if (current()) {
+    <img
+      class="bin__item"
+      [src]="imageFor(current()!)"
+      [alt]="current()!.name + ' dispensed'"
+    />
+  }
+</div>
+```
+
+An `@if` has no key. Its only question is "true or false", and it keeps its element for as long as
+the answer stays true. Buy a Cola, then a Root Beer two seconds later — while the Cola is still on
+screen, since it stays for 3.15s — and the condition was already true and remains true. Angular keeps
+the same `<img>` and updates `[src]` in place. The Cola's picture turns into a Root Beer mid-fade,
+still fading, with no drop. Wait the full 3.15s between purchases and it works fine, because
+`current` goes to `null` in between and the element is genuinely removed and recreated. A bug that
+only appears when you're quick is a nasty one to catch by hand.
+
+**Alternative B — `@for`, but tracked by the product code.** The `id` still isn't needed, because the
+product already carries something unique-looking:
+
+```html
+<!-- dispenser-bin.html -->
+<div class="bin__well">
+  @for (dispensed of current() ? [current()!] : []; track dispensed.code) {
+    <img class="bin__item" [src]="imageFor(dispensed)" [alt]="dispensed.name + ' dispensed'" />
+  }
+</div>
+```
+
+This fixes alternative A's problem and introduces a subtler one. Cola then Root Beer now works — `A1`
+and `B2` are different keys, so the element is recreated and the drop replays. But buy the *same*
+Cola twice and the key is `A1` both times. Angular sees the same identity, keeps the element, and
+the second drop never plays. The machine looks broken in precisely the case people trigger most:
+pressing the same slot twice.
+
+**What the project actually does.** The key is per *vend*, not per product:
+
+```typescript
+// dispenser-bin.ts
+export interface DispensedItem {
+  id: number;
+  product: Product;
+}
+```
+
+```typescript
+// vending-machine.ts — a fresh id each time, so repeat buys still replay the drop
+this.dispensed.set({ id: ++this.dispenseCount, product: result.product });
+```
+
+```html
+<!-- dispenser-bin.html -->
+<div class="bin__well">
+  @for (dispensed of current() ? [current()!] : []; track dispensed.id) {
+    <img
+      class="bin__item"
+      [src]="imageFor(dispensed.product)"
+      [alt]="dispensed.product.name + ' dispensed'"
+    />
+  }
+</div>
+```
+
+Side by side, on a second purchase:
+
+| Approach | Key | Cola → Root Beer | Cola → Cola |
+|---|---|---|---|
+| A: `@if` | none | `src` swapped, no drop | `src` unchanged, no drop |
+| B: `track dispensed.code` | `A1`, `B2` | new element, drop plays | same key, no drop |
+| Actual: `track dispensed.id` | `1`, `2`, `3`, … | new element, drop plays | new element, drop plays |
+
+**Why `@for` at all, for a list that is never longer than one?** Because `track` only exists on
+`@for`. The zero-or-one array is the only way to say "here is one element, and here is its identity"
+— `@if` cannot express it. The oddness buys the identity, and the identity buys the replay.
+
+### The same mechanism, the opposite goal
+
+This is worth holding next to [section 5](#control-flow), where the product grid tracks by
+`product.code`:
+
+| | Key | Result on update | Why that's wanted |
+|---|---|---|---|
+| `ProductGrid` | `product.code` | Tiles reused, quantities patched in | No flicker, no restarted CSS, nothing loses focus |
+| `DispenserBin` | `dispensed.id` | Element destroyed and recreated | The drop animation replays |
+
+Same feature, opposite intent. The grid wants stability, so it keys by something that stays the same;
+the bin wants a fresh element, so it keys by something that never does. Once you read `track` as
+"what makes this element *the same element*", both fall out of the same rule.
+
+(One more small thing in that template: `current()!` uses the **non-null assertion** `!`. The ternary
+has already established the value isn't null, but each `current()` is a separate function call and
+TypeScript can't carry the knowledge from one to the next.)
 
 ### The effect and its timers
 
@@ -975,9 +1294,10 @@ constructor() {
 Reading `this.item()` registers the dependency, so the effect re-runs whenever the parent sets a new
 item.
 
-**`clearTimers()` first is load-bearing.** Buy something at t=0 and something else at t=2s: without
-cancelling, the first purchase's removal timer would still fire at t=3.15s and wipe out the *second*
-product about a second after it arrived. There's a test for exactly this.
+**Don't drop or move the `clearTimers()` call — it has to run before the new timers are set.** Buy
+something at t=0 and something else at t=2s: without cancelling, the first purchase's removal timer
+would still fire at t=3.15s and wipe out the *second* product about a second after it arrived.
+There's a test for exactly this.
 
 **`destroyRef.onDestroy`** cancels pending timers when the component is destroyed. A `setTimeout`
 holds a reference to its closure — and through it, the component. Leaving them pending leaks the
@@ -1561,8 +1881,10 @@ thing only a timer test can catch.
 
 Worth being explicit:
 
-- **No HTTP-level tests.** `HttpTestingController` would let you assert request URLs and simulate
-  error responses; the container's error-handling branch is currently unverified.
+- **HTTP coverage is thin.** `VendingMachine` uses `HttpTestingController` to flush a 402 and a
+  malformed error body, which pins the branch described in
+  [appendix 20](#the-discriminator-and-why-it-tests-for-a-known-status). The happy path, the other
+  four statuses, and the coin endpoints are not covered.
 - **Audio output is never verified** — only that calls don't throw. The sounds in this project were
   checked by instrumenting `AudioContext` in a real browser and recording scheduled frequencies,
   which is a useful technique when you can't assert on sound itself.
@@ -1733,6 +2055,388 @@ say — where only `Object.freeze` actually holds.
   shallow.
 - Don't reach for a deep-freeze utility by default. The runtime cost is real, and for code you own the
   compile-time tools catch the same mistakes earlier.
+
+---
+
+## 18. Appendix: what `@angular` means in an import path
+
+Every component in this project opens with a line like the one in
+[section 4](#4-components):
+
+```typescript
+import { Component, computed, input } from '@angular/core';
+```
+
+The `@angular` part is an **npm scope**. It is not a folder in this project, not a decorator, and not
+an Angular language feature — it is a namespace that npm packages can be published under.
+
+### Scopes are a naming convention npm enforces
+
+A scoped package name has the form `@scope/name`. Everything before the first `/` is the scope;
+everything after is the package. `@angular/core` and `@angular/common` are two *separate* packages
+that happen to share a namespace, in the same way that `angular.dev` and `blog.angular.dev` are
+separate sites sharing a domain.
+
+Scopes exist because the flat npm namespace filled up and became easy to squat. A scope is owned by
+a user or organisation, and only they can publish under it — so a package under `@angular` is
+first-party framework code from the Angular team, whereas an unscoped `angular-something` could be
+published by anyone.
+
+The `@` here is unrelated to the other two `@`s this document uses: `@Component`
+([section 2](#decorators)) is a TypeScript decorator, and `@if` / `@for`
+([section 5](#control-flow)) are Angular template blocks. Three different meanings, one symbol.
+
+### Bare specifiers versus relative paths
+
+[Section 2](#modules) states the rule in one line; this is the mechanics behind it. Look at the
+imports in the `ProductSlot` sample together:
+
+```typescript
+import { CurrencyPipe } from '@angular/common';                  // bare specifier
+import { Component, computed, input } from '@angular/core';      // bare specifier
+import { Product } from '../../../core/models/product.model';    // relative path
+import { productImageFor } from '../../../core/utils/product-image';
+```
+
+A specifier starting with `.` or `..` is **relative** — resolved against the importing file's own
+location on disk. Anything else is a **bare specifier**, looked up in `node_modules`. The leading `@`
+does not change that; it is simply part of the package name. So `@angular/core` resolves to
+`node_modules/@angular/core`, and scoped packages nest one directory deeper than unscoped ones:
+
+```
+node_modules/
+  rxjs/                 <- unscoped: import from 'rxjs'
+  @angular/
+    core/               <- scoped:   import from '@angular/core'
+    common/
+```
+
+Note the collision worth knowing about when reading this document: `@angular/core` and this project's
+own `src/app/core/` folder are unrelated things that share a word. The first is the framework; the
+second is [our own shared code](#the-pieces). This project defines no `paths` aliases in
+`tsconfig.json`, so there is no third category — an import is either relative or a package.
+
+### What's installed here
+
+Bare specifiers only resolve because something put the package on disk. The versions are declared in
+`package.json` and `npm install` fetches them:
+
+```json
+"dependencies": {
+  "@angular/common": "^22.0.0",
+  "@angular/core": "^22.0.0",
+  ...
+}
+```
+
+The app declares six `@angular` packages as runtime dependencies (`common`, `compiler`, `core`,
+`forms`, `platform-browser`, `router`) plus three build-time ones under `devDependencies`
+(`@angular/build`, `@angular/cli`, `@angular/compiler-cli`). The two that appear in nearly every
+file:
+
+- **`@angular/core`** — the framework primitives: `Component`, `signal`, `computed`, `input`,
+  `output`, `effect`, `inject`.
+- **`@angular/common`** — browser-facing pieces built on top of it, such as `CurrencyPipe`.
+
+The framework is split this way so an application only pays for what it imports; a build that never
+uses the router doesn't bundle `@angular/router`.
+
+### Subpaths
+
+Some imports have a third segment:
+
+```typescript
+import { HttpClient } from '@angular/common/http';
+import { provideHttpClientTesting } from '@angular/common/http/testing';
+```
+
+The scope is still only the first segment. This is the package `@angular/common` plus the **subpath**
+`/http` — a named entry point the package publishes in the `exports` field of its own `package.json`.
+It is not a directory path you could navigate to; `node_modules/@angular/common` contains no `http`
+folder. The package decides which subpaths exist, which is also how it keeps its internals private.
+
+---
+
+## 19. Appendix: writable, derived, and why `computed` is read-only
+
+[Section 6](#computed) introduces `computed` as a derived signal. A fair follow-up question is how
+you'd then set or update one. The answer is that you can't, and the reason is worth understanding
+because it's the whole point of the API.
+
+### There is no setter, at the type level
+
+```typescript
+// node_modules/@angular/core/types/core.d.ts
+declare function signal<T>(initialValue: T, ...): WritableSignal<T>;
+declare function computed<T>(computation: () => T, options?): Signal<T>;
+```
+
+Two different return types. `Signal<T>` is essentially `(() => T)` plus internal reactive metadata —
+readable, nothing else. `WritableSignal<T>` **extends** it and adds `.set()`, `.update()`, and
+`.asReadonly()`.
+
+So this isn't a runtime restriction you can route around:
+
+```typescript
+protected readonly imageUrl = computed(() => productImageFor(this.product()));
+
+this.imageUrl.set('/images/products/A1-cola.svg');
+// Property 'set' does not exist on type 'Signal<string>'.
+```
+
+The property doesn't exist on the type. `asReadonly()` on a writable signal is the same idea pointed
+the other way: it hands out a `Signal<T>` view so collaborators can read your state without writing
+to it.
+
+### You change a computed by changing what it reads
+
+The only `computed` in this codebase is `features/vending-machine/product-slot/product-slot.ts`:
+
+```typescript
+readonly product = input.required<Product>();
+protected readonly imageUrl = computed(() => productImageFor(this.product()));
+```
+
+`imageUrl` read `product()` while computing, so Angular recorded that dependency. To make `imageUrl`
+produce a different value, the parent rebinds the input:
+
+```html
+<app-product-slot [product]="product" />
+```
+
+The input signal changes → `imageUrl` is marked stale → it recomputes the next time something reads
+it, and caches again. Anywhere else, the same walk applies: find the writable signal upstream and
+`.set()` or `.update()` that.
+
+That indirection is the guarantee. A computed cannot hold a value inconsistent with its inputs,
+because it has no storage of its own that you could desynchronise. A hand-maintained copy kept in
+step by an `effect` can, and eventually does.
+
+### Lazy, not eager
+
+Worth knowing when reasoning about the above: a stale computed doesn't recompute when its dependency
+changes — it recomputes when it is next **read**. If nothing reads it, the work never happens. Two
+consequences: the computation must be pure (no side effects — you cannot rely on when or whether it
+runs), and it is cheap to define computeds that are only sometimes displayed.
+
+### The object-mutation wrinkle
+
+If a computed returns an object, reading it gives you the real object, and mutating that object
+notifies nobody:
+
+```typescript
+const slot = computed(() => ({ code: this.product().code }));
+slot().code = 'D3';   // compiles, changes the cached object, no view updates
+```
+
+Nothing in the reactive graph changed, so no dependent recomputes — and the mutation is lost on the
+next recompute anyway. This is the same class of trap as [appendix 17](#17-appendix-const-readonly-and-actually-preventing-mutation):
+`readonly` on the field stops you rebinding `slot`, not mutating what it returns.
+
+### When you genuinely need derived *and* writable
+
+`linkedSignal` covers that case. It is a real API — `@publicApi 20.0`, available in the
+`@angular/core` 22.x this project installs — and it returns a `WritableSignal` whose value is
+**reset** whenever its source changes:
+
+```typescript
+import { linkedSignal } from '@angular/core';
+
+// seeded from the product list, resets when that list reloads,
+// but can also be set directly
+protected readonly selectedCode = linkedSignal(() => this.products()[0]?.code ?? '');
+
+this.selectedCode.set('C3');   // allowed — this is a WritableSignal
+```
+
+The reset *is* the semantics. It fits a selection or a form field seeded from server data, where a
+local edit should win until fresh data arrives and then give way. If you don't want the local write
+discarded when the source updates, `linkedSignal` is the wrong tool and you want a plain `signal()`.
+
+### Choosing between the three
+
+| | Writable | Stays in sync with sources | Reach for it when |
+|---|---|---|---|
+| `signal()` | Yes | No — you maintain it | The value is owned here and set by user or server events |
+| `computed()` | **No** | Yes, automatically | The value is purely a function of other state |
+| `linkedSignal()` | Yes | Re-seeded on source change | Derived, but locally overridable until the source moves |
+
+Default to `computed` whenever the value is derivable. Reach for `linkedSignal` for the narrow
+override case. Reach for a plain `signal` synchronised by an `effect` essentially never — as
+[section 6](#effect) puts it, effects are for reaching outside the reactive graph, not for computing
+values.
+
+---
+
+## 20. Appendix: error handling across the API boundary
+
+[Section 8](#error-handling) shows the purchase error callback and explains the shape of it. This is
+the longer version: why a business outcome arrives on the failure channel at all, what is actually in
+the object you're handed, why the guard that sorts results from failures has to test for a *known*
+status, and what happens on the four subscriptions that have no error callback at all.
+
+### Non-2xx becomes an error notification
+
+An Observable has three channels: `next` (a value), `error` (terminated, badly), `complete`
+(terminated, fine). `HttpClient` maps HTTP onto them by status code, and the rule is blunt:
+
+- **2xx** → `next` with the deserialized body, then `complete`.
+- **anything else** → `error` with an `HttpErrorResponse`. `next` never fires and the stream is over.
+
+There is no third option. So the moment the API chose semantic status codes for business outcomes,
+every one of those outcomes became an "error" as far as RxJS is concerned:
+
+| Outcome | `PurchaseStatus` | HTTP | Callback |
+|---|---|---|---|
+| Vend succeeded | `Success` | 200 | `next` |
+| Unknown code | `ProductNotFound` | 404 | `error` |
+| Sold out | `OutOfStock` | 409 | `error` |
+| Change can't be made | `ChangeUnavailable` | 409 | `error` |
+| Not enough money in | `InsufficientFunds` | 402 | `error` |
+
+Four of the five normal things a vending machine does arrive on the failure path. That's not a bug in
+either half — it's the cost of the API being HTTP-honest, and the front end has to pay it somewhere.
+`PurchaseController.cs` is where the mapping is chosen.
+
+### What `HttpErrorResponse` actually holds
+
+```typescript
+error: (err: HttpErrorResponse) => { ... }
+```
+
+The useful fields are `status` (the number), `statusText`, `url`, `ok` (always `false`), and `error` —
+the body. Note the awkward naming: `err.error` is not a nested error object, it's the **response
+body**, and it comes in three quite different shapes:
+
+| Situation | `err.status` | `err.error` |
+|---|---|---|
+| API returned JSON with a non-2xx code | 402, 404, 409 | the parsed object |
+| Response wasn't parseable JSON | any | the raw string |
+| Request never completed — server down, CORS, offline | **0** | a `ProgressEvent` |
+
+That last row is the one to remember: a network failure gives `status: 0` and no body at all. It is
+the case the generic branch exists for.
+
+For this API the parsed object is a real `PurchaseResult` — captured from the running API:
+
+```json
+// 402 Payment Required
+{"status":"InsufficientFunds","product":{"code":"A1","name":"Cola","priceCents":125,...},
+ "changeDueCents":0,"changeBreakdown":null,"amountStillNeededCents":125}
+```
+
+Everything the UI needs to render the outcome is there, which is exactly why the handler feeds it
+back through `handlePurchaseResult` rather than replacing it with a generic apology.
+
+### The discriminator, and why it tests for a known status
+
+Splitting results from failures is `isPurchaseResult`, in `core/models/purchase-result.model.ts`
+beside the interface it narrows to:
+
+```typescript
+export function isPurchaseResult(body: unknown): body is PurchaseResult {
+  return (
+    typeof body === 'object' && body !== null &&
+    PURCHASE_STATUSES.includes((body as PurchaseResult).status)
+  );
+}
+```
+
+The obvious cheaper version — `if (err.error?.status)`, "does the body have a status at all" — is the
+one to avoid, and the reason is worth seeing, because it's a good example of how a boundary check can
+look sufficient and not be.
+
+`PurchaseResult` is not the only body this API can return. ASP.NET Core's `[ApiController]` model
+validation answers with RFC 9110 problem details, which carry a `status` of their own — a number:
+
+```json
+// 400 from POST /api/purchase with a body missing productCode
+{"type":"https://tools.ietf.org/html/rfc9110#section-15.5.1",
+ "title":"One or more validation errors occurred.","status":400,"errors":{...}}
+```
+
+`400` is truthy. Under the loose check that body would pass as a result and reach
+`handlePurchaseResult`, where it isn't `'Success'` so it buzzes, then matches no case in the `switch`
+and falls straight through — leaving the **previous** message on the display. A rejection noise and
+stale text, where the user should have got "Something went wrong."
+
+Testing membership of `PURCHASE_STATUSES` is what closes that. And because the union is derived from
+that same array —
+
+```typescript
+export const PURCHASE_STATUSES = ['Success', 'ProductNotFound', ...] as const;
+export type PurchaseStatus = (typeof PURCHASE_STATUSES)[number];
+```
+
+— the compile-time type and the runtime list cannot drift apart. Adding a status to the array adds it
+to the union; there is no second place to remember.
+
+The other half of the guard is its return type. `body is PurchaseResult` is a **type predicate**: a
+`true` return narrows the argument's type for the compiler, so inside the `if` you can use
+`err.error` as a `PurchaseResult` with no cast. That's the ergonomic part. The runtime check is the
+substantive part — an `as` assertion would narrow the type just as well and verify nothing, which is
+exactly the failure mode [section 2](#so-what-actually-happens-if-the-shape-is-wrong) describes at
+the boundary.
+
+Worth being clear about the scope of the guard: it checks the discriminant, not the whole shape. A
+body claiming `status: 'Success'` with a malformed `product` still passes. Validating every field
+would mean a schema validator (Zod and similar), which is the right call when the API is not one you
+control — here the same repository owns both ends.
+
+### The subscriptions with no error callback
+
+The purchase call is the only one that handles errors. The other four don't:
+
+```typescript
+this.productService.getProducts().subscribe((products) => this.products.set(products));
+this.machineService.getBalance().subscribe((balance) => ...);
+this.machineService.insertCoin(denomination).subscribe((balance) => ...);
+this.machineService.returnCoins().subscribe((result) => ...);
+```
+
+A single-argument `subscribe()` registers only `next`. If one of these errors, RxJS has nowhere to
+deliver it, so it is reported as an unhandled error and surfaces in the console. Nothing in the UI
+says anything.
+
+What that looks like in practice: with the API down, `ngOnInit` fires both refreshes, both fail, and
+the machine renders with an empty product grid and a zero balance — indistinguishable from a machine
+that is genuinely empty. Insert a coin and the button clicks, the coin sound plays (it's fired
+locally in `CoinSlot`, before the request), and the balance simply doesn't move.
+
+Whether that's acceptable is a judgement call, not an oversight to fix reflexively. This is a
+single-screen kiosk app where the API is on the same machine; a visible "machine offline" state would
+be better, and it's the kind of thing worth adding deliberately rather than by scattering error
+callbacks.
+
+### The three places error handling can live
+
+- **In the subscriber**, as here. Fine when the handling is specific to that one call, like the
+  purchase result being rescued from the error channel.
+- **In the pipeline with `catchError`**, when the recovery belongs to the request rather than the
+  caller: `getProducts().pipe(catchError(() => of([])))` turns a failure into an empty list and a
+  normal `next`. Related operators: `retry(n)` for transient failures, `timeout(ms)` for slow ones.
+- **In an `HttpInterceptor`**, for anything cross-cutting — logging every failure, attaching a
+  correlation id, showing one global offline banner. This project has none; at five endpoints it
+  wouldn't earn its keep.
+
+A rule of thumb: if two callers would write the same `catch`, move it down into the service or an
+interceptor. If the handling is about *what this screen does next*, keep it in the subscriber.
+
+### A note on the API's side of the choice
+
+The awkwardness traces back to one decision: whether a business outcome deserves a non-2xx code.
+
+- **Semantic codes** (what this API does) — 402/404/409 are meaningful to any HTTP client, cache, or
+  proxy, and the response is self-describing. Cost: the browser logs them as errors, and the client
+  has to rescue results from the failure channel.
+- **200 with a status field** — every business outcome is a success at the transport level, and the
+  `error` callback then means only "something is genuinely broken". Cost: it discards the part of HTTP
+  built to express exactly this, and every client must read the body to know what happened.
+
+Both are defensible and the choice is the API's to make; the
+[backend doc](../../backend/docs/README.md) sets out the reasoning, including why the body is sent
+with the error too. What matters for the front end is that the choice is *known*, because the entire
+shape of `onSelectCode` follows from it.
 
 ---
 
