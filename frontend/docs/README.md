@@ -1028,11 +1028,63 @@ the server means adding a case here — the type system won't force it (an unhan
 through), which is a known soft spot.
 
 **`refreshProducts()` after a success** re-fetches the grid so quantities and out-of-stock lights
-update. The server is treated as the source of truth rather than decrementing locally — slower, but
-it cannot drift.
+update. The server is treated as the source of truth rather than decrementing locally — one extra
+round trip, in exchange for a UI that cannot drift from it. That trade-off is worth unpacking; see
+below.
 
 `refreshBalance()` runs on *every* path, including failures, because a rejected purchase leaves the
 balance intact and the display must reflect that.
+
+### Refetch, predict, or use the response
+
+There are three ways to get the grid to show one fewer Cola, and the choice between them is a
+recurring one in any app backed by an API.
+
+**Refetch** is what the code does: ask the server again and replace what you have.
+
+```typescript
+this.productService.getProducts().subscribe((products) => this.products.set(products));
+```
+
+**Predict locally** — the "decrementing locally" alternative — skips the request and computes the new
+state client-side:
+
+```typescript
+this.products.update((list) =>
+  list.map((p) => (p.code === result.product!.code ? { ...p, quantity: p.quantity - 1 } : p)),
+);
+```
+
+Faster, and already subtly wrong. It updates `quantity` but not `isOutOfStock`, so buying the last
+Root Beer would leave the tile lit as in stock at zero. `isOutOfStock` is *derived*, and the rule
+lives on the server:
+
+```csharp
+// VendingMachineService.ToDto
+new(product.Code, product.Name, product.PriceCents, product.Quantity, product.Quantity == 0, ...)
+```
+
+Fixing the prediction means re-implementing that rule in TypeScript, and now one business rule exists
+in two languages with nothing checking that they agree. Change it server-side — out of stock at a
+reserve threshold rather than zero, say — and the UI keeps quietly using the old one. **That is what
+"drift" means here: not a synchronisation bug, a duplicated-logic bug.**
+
+The general technique is **optimistic UI** — apply the predicted result immediately, reconcile when
+the response lands, roll back if it disagrees. Done properly it needs all three parts, which is real
+machinery. It earns that cost when the round trip actually hurts: high latency, expensive refetches,
+high-frequency interactions, offline support. None of which applies to a kiosk talking to localhost
+about twelve rows of JSON, which is why refetch is the right call here.
+
+**Use the response.** There is a third option this code leaves unused, and it's arguably the best of
+the three. The purchase response already carries the answer — `ToDto` runs *after* the decrement and
+the commit, so `result.product` holds the new quantity and the server's own `isOutOfStock`. Patching
+that one product into the grid costs no extra round trip and duplicates no logic, because the server
+still decided both values. The catch is scope: it refreshes only the product you bought, so a change
+to any other row waits for the next full fetch. Irrelevant for one machine and one user; relevant the
+moment there are two.
+
+The same reasoning already governs the balance in [section 8](#subscribing) — `insertCoin` sets
+`balanceCents` from the server's answer rather than adding 25 to it locally.
 
 ---
 
