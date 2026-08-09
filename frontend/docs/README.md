@@ -1154,19 +1154,101 @@ this.dispensed.set({ id: ++this.dispenseCount, product: result.product });
 
 ### Why the alternatives don't work
 
-**Why not `@if (current())`?** An `@if` has no key — its only question is "true or false". Buy a
-second product while the first is still on screen (it stays for 3.15s) and the condition was already
-true and stays true, so Angular keeps the element and just updates `[src]`. You'd see the first
-product's picture silently turn into the second one, mid-fade, with no drop at all.
+Each of these is what you'd naturally write first. Seeing them in full is the quickest way to see
+what the `id` is buying, so each one below is the complete version of the same three files.
 
-**Why not `track dispensed.product.code`?** Closer, and it works for *different* products — `A1` then
-`B2` are different keys, so you get a new element. But buy the same Cola twice and the key is `A1`
-both times, so the element is reused and the second drop never plays. The exact case the feature is
-for is the one it fails.
+**Alternative A — a plain `@if`.** Without the need for a key, the `id` has nothing to do, so it goes
+away and the whole chain gets simpler. That's what makes this the tempting one:
+
+```typescript
+// dispenser-bin.ts — the item is just a Product now
+readonly item = input<Product | null>(null);
+protected readonly current = signal<Product | null>(null);
+```
+
+```typescript
+// vending-machine.ts — no counter to maintain
+this.dispensed.set(result.product);
+```
+
+```html
+<!-- dispenser-bin.html -->
+<div class="bin__well">
+  @if (current()) {
+    <img
+      class="bin__item"
+      [src]="imageFor(current()!)"
+      [alt]="current()!.name + ' dispensed'"
+    />
+  }
+</div>
+```
+
+An `@if` has no key. Its only question is "true or false", and it keeps its element for as long as
+the answer stays true. Buy a Cola, then a Root Beer two seconds later — while the Cola is still on
+screen, since it stays for 3.15s — and the condition was already true and remains true. Angular keeps
+the same `<img>` and updates `[src]` in place. The Cola's picture turns into a Root Beer mid-fade,
+still fading, with no drop. Wait the full 3.15s between purchases and it works fine, because
+`current` goes to `null` in between and the element is genuinely removed and recreated. A bug that
+only appears when you're quick is a nasty one to catch by hand.
+
+**Alternative B — `@for`, but tracked by the product code.** The `id` still isn't needed, because the
+product already carries something unique-looking:
+
+```html
+<!-- dispenser-bin.html -->
+<div class="bin__well">
+  @for (dispensed of current() ? [current()!] : []; track dispensed.code) {
+    <img class="bin__item" [src]="imageFor(dispensed)" [alt]="dispensed.name + ' dispensed'" />
+  }
+</div>
+```
+
+This fixes alternative A's problem and introduces a subtler one. Cola then Root Beer now works — `A1`
+and `B2` are different keys, so the element is recreated and the drop replays. But buy the *same*
+Cola twice and the key is `A1` both times. Angular sees the same identity, keeps the element, and
+the second drop never plays. The machine looks broken in precisely the case people trigger most:
+pressing the same slot twice.
+
+**What the project actually does.** The key is per *vend*, not per product:
+
+```typescript
+// dispenser-bin.ts
+export interface DispensedItem {
+  id: number;
+  product: Product;
+}
+```
+
+```typescript
+// vending-machine.ts — a fresh id each time, so repeat buys still replay the drop
+this.dispensed.set({ id: ++this.dispenseCount, product: result.product });
+```
+
+```html
+<!-- dispenser-bin.html -->
+<div class="bin__well">
+  @for (dispensed of current() ? [current()!] : []; track dispensed.id) {
+    <img
+      class="bin__item"
+      [src]="imageFor(dispensed.product)"
+      [alt]="dispensed.product.name + ' dispensed'"
+    />
+  }
+</div>
+```
+
+Side by side, on a second purchase:
+
+| Approach | Key | Cola → Root Beer | Cola → Cola |
+|---|---|---|---|
+| A: `@if` | none | `src` swapped, no drop | `src` unchanged, no drop |
+| B: `track dispensed.code` | `A1`, `B2` | new element, drop plays | same key, no drop |
+| Actual: `track dispensed.id` | `1`, `2`, `3`, … | new element, drop plays | new element, drop plays |
 
 **Why `@for` at all, for a list that is never longer than one?** Because `track` only exists on
-`@for`. The zero-or-one array is a way of saying "here is one element, and here is its identity" —
-which `@if` cannot express. The oddness buys the identity.
+`@for`. The zero-or-one array is the only way to say "here is one element, and here is its identity"
+— `@if` cannot express it. The oddness buys the identity, and the identity buys the replay.
 
 ### The same mechanism, the opposite goal
 
