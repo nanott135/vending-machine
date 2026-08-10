@@ -83,6 +83,13 @@ the frameworks involved:
 - [**The Back End, Explained From Scratch**](backend/docs/README.md) — C#, ASP.NET Core, dependency
   injection, EF Core, and the purchase transaction in detail.
 
+One write-up covers a single defect end to end:
+
+- [**Case study: the purchase error-body check**](docs/case-study-purchase-error-defect.md) — a
+  boundary defect that was invisible from the source and obvious from the wire, how probing the
+  running API surfaced it, the type guard that fixed it, and how the regression test was confirmed to
+  fail without the fix.
+
 Three shorter files carry the reasoning:
 
 - [`PLAN.md`](PLAN.md) — the original design decisions and why, including why there is no
