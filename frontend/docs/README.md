@@ -1710,10 +1710,15 @@ SCSS is CSS plus nesting, variables, and more. Nesting is what's used here:
 ```scss
 :root {
   --cream: #f6edda;
+  --cream-deep: #ebdcc0;
   --coral: #e2543f;
+  --coral-dark: #b23a2c;
   --turquoise: #4ec3c7;
+  --teal-deep: #1f7a7d;
+  --mustard: #f0b94e;
   --charcoal: #2b2b2e;
   --chrome: linear-gradient(180deg, #f4f6f8 0%, #c3c8cc 45%, #8d9296 55%, #e8ebed 100%);
+
   --script: Georgia, 'Times New Roman', serif;
   --readout: 'Courier New', Courier, monospace;
 }
