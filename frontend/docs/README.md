@@ -1710,10 +1710,15 @@ SCSS is CSS plus nesting, variables, and more. Nesting is what's used here:
 ```scss
 :root {
   --cream: #f6edda;
+  --cream-deep: #ebdcc0;
   --coral: #e2543f;
+  --coral-dark: #b23a2c;
   --turquoise: #4ec3c7;
+  --teal-deep: #1f7a7d;
+  --mustard: #f0b94e;
   --charcoal: #2b2b2e;
   --chrome: linear-gradient(180deg, #f4f6f8 0%, #c3c8cc 45%, #8d9296 55%, #e8ebed 100%);
+
   --script: Georgia, 'Times New Roman', serif;
   --readout: 'Courier New', Courier, monospace;
 }
@@ -1722,9 +1727,35 @@ SCSS is CSS plus nesting, variables, and more. Nesting is what's used here:
 Used as `color: var(--coral)`. Unlike SCSS variables (resolved at compile time), these are live in
 the browser: readable from JavaScript and changeable at runtime, which is how theming works.
 
-They're declared once in `styles.scss` and used everywhere. The same palette appears in the hand-
-authored SVGs, so a colour change means editing one list rather than hunting hex codes through a
-dozen files.
+They're declared once in `styles.scss` and used everywhere *in the SCSS* — `var(--charcoal)` alone
+appears nineteen times, and no component stylesheet hard-codes a palette colour.
+
+**The artwork is the exception, and not one that could be tidied away.** The SVGs use the same
+palette as literal hex — `#2B2B2E`, not `var(--charcoal)` — because they have to. Every SVG here is
+loaded as a *separate document*: `<img [src]>` for the products and coins, `background-image: url()`
+for the facade. Custom properties defined on the host page's `:root` do not cascade across that
+boundary, so a `var(--charcoal)` written inside `a1-cola.svg` would resolve to nothing.
+
+The consequence is worth stating plainly: **changing `--coral` restyles the cabinet and leaves all
+seventeen pieces of artwork exactly as they were.** Keeping the two in step is a manual pass over 206
+hex literals.
+
+A find-and-replace on the old value wouldn't do it either, because the artwork *varies* from the
+palette rather than copying it. 129 of those 206 literals are palette values exactly; the other 77
+are neighbouring shades with no variable equivalent — six near-corals, seven near-mustards. Both
+kinds sit in a single file:
+
+```xml
+<g stroke="#E2543F" ...>                          <!-- sparkles: --coral exactly -->
+<rect ... fill="#C0392B" stroke="#2B2B2E" .../>   <!-- can body: a deeper red, no variable -->
+```
+
+Replacing `#E2543F` would recolour the sparkles and leave the can.
+
+Inlining the SVGs into the templates would put them in the same document and make `var()` work, at
+the cost of losing separate caching for the artwork and moving it into the JS bundle — not a trade
+worth making at this size. So the palette is shared with the artwork **by convention, not by
+reference**: a colour change is a two-step job, and the second step is manual.
 
 ### Naming
 

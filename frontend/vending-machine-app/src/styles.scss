@@ -1,7 +1,14 @@
 /* You can add global styles to this file, and also import other style files */
 
 :root {
-  /* Mid-century palette shared by every component and the SVG artwork. */
+  /*
+   * Mid-century palette, used by every component stylesheet via var().
+   * The SVGs in public/images/ match it but cannot reference it - they load as separate
+   * documents (<img src>, background-image), which custom properties don't cross - so their
+   * colours are literal hex, and many are deliberate variations rather than copies. Changing
+   * a value here needs a hand pass over the artwork; find-and-replace on the old hex misses
+   * the variations.
+   */
   --cream: #f6edda;
   --cream-deep: #ebdcc0;
   --coral: #e2543f;
