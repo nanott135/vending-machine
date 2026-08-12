@@ -121,9 +121,14 @@ return cascade, vend thunk-and-chime, and a reject buzz. A mute toggle in the ma
 
 **Artwork** - all imagery is hand-authored SVG in `public/images/` (`products/<code>-<name>.svg`,
 `coins/`, `machine-facade.svg`), roughly 20KB in total. The mid-century palette and fonts live as
-CSS custom properties in `src/styles.scss` (`--cream`, `--coral`, `--turquoise`, `--mustard`,
-`--charcoal`, `--chrome`, `--script`, `--readout`); use those rather than hard-coding hex values, so
-the SCSS and the SVGs stay in step.
+CSS custom properties in `src/styles.scss` (`--cream`, `--cream-deep`, `--coral`, `--coral-dark`,
+`--turquoise`, `--teal-deep`, `--mustard`, `--charcoal`, `--chrome`, `--script`, `--readout`); use
+those in SCSS rather than hard-coding hex values. The SVGs *cannot* use them - they load as separate
+documents (`<img src>` for products and coins, `background-image: url()` for the facade), and
+`:root` custom properties don't cascade across that boundary. Artwork colours are therefore literal
+hex, and many are deliberate variations on a palette value rather than copies of one (the cola can
+is `#C0392B`, not `--coral`'s `#E2543F`), so a palette change needs a hand pass over the SVGs -
+find-and-replace on the old hex will miss things.
 
 **Animation and motion** - `prefers-reduced-motion` is honoured in the dispenser bin (no fall, no
 drift, opacity-only fade on the same schedule). Keep new motion behind the same guard.
