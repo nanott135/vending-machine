@@ -1916,9 +1916,13 @@ Worth being explicit:
   malformed error body, which pins the branch described in
   [appendix 20](#the-discriminator-and-why-it-tests-for-a-known-status). The happy path, the other
   four statuses, and the coin endpoints are not covered.
-- **Audio output is never verified** — only that calls don't throw. The sounds in this project were
-  checked by instrumenting `AudioContext` in a real browser and recording scheduled frequencies,
-  which is a useful technique when you can't assert on sound itself.
+- **No test asserts on the sound itself** — nothing checks a frequency, an envelope, or when a note
+  is scheduled. The suite covers the contract around the audio rather than the audio: that mute
+  toggles and persists to `localStorage`, that muting short-circuits before an `AudioContext` is
+  ever constructed (`'does not construct an AudioContext while muted'` stubs the constructor and
+  asserts it is never called), and that the no-Web-Audio path stays silent instead of throwing. The
+  sounds were checked by instrumenting `AudioContext` in a real browser and recording scheduled
+  frequencies — a useful technique when the thing you care about can't be asserted on directly.
 - **The scaler has no unit test**; it was verified by measuring rendered geometry across six viewport
   sizes in a real browser.
 
