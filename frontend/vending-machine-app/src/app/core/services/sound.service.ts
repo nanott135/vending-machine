@@ -11,6 +11,13 @@ const COIN_PITCH: Record<CoinDenomination, number> = {
   Dollar: 1450,
 };
 
+/** Pitch range the coin return sweeps through, highest clink to lowest. */
+const RETURN_PITCH_TOP = 2400;
+const RETURN_PITCH_BOTTOM = 1100;
+
+/** Cap on the cascade, so returning a fistful of nickels doesn't become a machine-gun burst. */
+const MAX_RETURN_CLINKS = 8;
+
 /**
  * Every sound is synthesized at play time with the Web Audio API - there are no audio assets to
  * ship or decode. The AudioContext is created lazily on the first sound because browsers only
@@ -84,16 +91,27 @@ export class SoundService {
     });
   }
 
-  /** A little cascade of clinks, as if coins were dropping into the return tray. */
-  coinReturn(): void {
+  /**
+   * A cascade of clinks, one per returned coin, as if they were dropping into the return tray.
+   * The pitch falls across the whole cascade, so a single coin is one high clink and a handful is
+   * an audibly longer tumble down to the bottom of the range.
+   */
+  coinReturn(coinCount: number): void {
     const ctx = this.audioContext();
     if (!ctx) {
       return;
     }
+    const clinks = Math.min(MAX_RETURN_CLINKS, Math.max(1, Math.floor(coinCount)));
     const start = ctx.currentTime;
-    [0, 0.09, 0.17, 0.28].forEach((offset, index) => {
-      this.clink(ctx, 2400 - index * 260, start + offset, 0.7);
-    });
+
+    for (let index = 0; index < clinks; index++) {
+      // 0 for the first coin, 1 for the last; a lone coin never leaves the top of the range.
+      const fall = clinks === 1 ? 0 : index / (clinks - 1);
+      const frequency = RETURN_PITCH_TOP + (RETURN_PITCH_BOTTOM - RETURN_PITCH_TOP) * fall;
+      // Spacing widens slightly as the cascade goes on - evenly spaced clinks read as a rattle.
+      const offset = index * 0.085 + index * index * 0.004;
+      this.clink(ctx, frequency, start + offset, 0.7);
+    }
   }
 
   /** The vend: a mechanical thunk as the coil turns, then a two-note confirmation chime. */

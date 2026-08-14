@@ -23,7 +23,11 @@
             (insertCoin)="onInsertCoin($event)"
             (returnCoins)="onReturnCoins()"
           />
-          <app-keypad (selectCode)="onSelectCode($event)" />
+          <app-keypad
+            [products]="products()"
+            [balanceCents]="balanceCents()"
+            (selectCode)="onSelectCode($event)"
+          />
 
           @if (message()) {
             <p class="vending-machine__message">{{ message() }}</p>

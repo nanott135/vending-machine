@@ -729,12 +729,12 @@ through *providers*, not types:
 
 ```csharp
 var options = new DbContextOptionsBuilder<VendingMachineDbContext>()
-    .UseInMemoryDatabase(Guid.NewGuid().ToString())
+    .UseSqlite(connection)
     .Options;
 ```
 
-`VendingMachineServiceTests` swaps SQL Server for an in-memory store with no interface involved. The
-seam you would be adding already exists one level down.
+`VendingMachineServiceTests` swaps SQL Server for SQLite with no interface involved. The seam you
+would be adding already exists one level down.
 
 **Mocking a `DbContext` produces tests that lie.** To fake a `DbSet<T>` you must implement
 `IQueryable` plus the async enumerable interfaces. Your LINQ then executes as LINQ-to-Objects, whose
@@ -1564,38 +1564,95 @@ This is the payoff for keeping `ChangeMakingService` pure. No setup, no cleanup,
 
 ### Testing against a database
 
-`VendingMachineServiceTests` needs a `DbContext`. Rather than a real SQL Server, it uses EF Core's
-**in-memory provider**:
+`VendingMachineServiceTests` needs a `DbContext`. Rather than a real SQL Server, it uses **SQLite in
+its in-memory mode**, wrapped in the small `TestDatabase` helper (`VendingMachine.Api.Tests/TestDatabase.cs`):
 
 ```csharp
-private static VendingMachineDbContext CreateContext()
+public sealed class TestDatabase : IDisposable
 {
-    var options = new DbContextOptionsBuilder<VendingMachineDbContext>()
-        .UseInMemoryDatabase(Guid.NewGuid().ToString())
-        .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
-        .Options;
+    private readonly SqliteConnection _connection;
 
-    var context = new VendingMachineDbContext(options);
-    context.Database.EnsureCreated();
-    return context;
+    public TestDatabase()
+    {
+        _connection = new SqliteConnection("DataSource=:memory:");
+        _connection.Open();
+
+        Options = new DbContextOptionsBuilder<VendingMachineDbContext>()
+            .UseSqlite(_connection)
+            .Options;
+
+        using var context = new VendingMachineDbContext(Options);
+        context.Database.EnsureCreated();
+    }
+
+    public DbContextOptions<VendingMachineDbContext> Options { get; }
+
+    public VendingMachineDbContext CreateContext() => new(Options);
+
+    public void Dispose() => _connection.Dispose();
 }
 ```
 
-Three deliberate details:
+Four deliberate details:
 
-1. **`Guid.NewGuid().ToString()` as the database name.** Each test gets a uniquely-named store, so
-   tests are isolated and can run in parallel. Reuse a fixed name and one test's writes would leak
-   into another — the classic source of "passes alone, fails in the suite."
+1. **A field, not a static helper.** xUnit constructs a *new instance of the test class per test*, so
+   `private readonly TestDatabase _database = new();` gives every test its own database, isolated and
+   safe to run in parallel. Share one and a test's writes leak into another — the classic source of
+   "passes alone, fails in the suite."
 
-2. **`ConfigureWarnings(... TransactionIgnoredWarning)`.** The in-memory provider has no real
-   transactions, so `BeginTransactionAsync` is a no-op and EF warns loudly (by default, throws). The
-   test suppresses it — with a comment noting transactional behaviour was verified against real SQL
-   Server manually. **This is a genuine limitation to be honest about:** these tests do not prove
-   atomicity. They prove the logic around it.
+2. **The connection is opened in the constructor and held.** A `DataSource=:memory:` database exists
+   only as long as its connection: close it and the schema and data vanish. Holding one open
+   connection for the test's lifetime is what keeps the database alive, and disposing it in
+   `Dispose()` is the whole of the cleanup.
 
-3. **`EnsureCreated()`** creates the schema *and applies the `HasData` seed*. So every test starts
+3. **`CreateContext()` can be called more than once**, and every context shares that one connection
+   and therefore that one database. This matters: a test can write through one context and then
+   verify through a second, whose change tracker knows nothing — so the assertions are about what is
+   really *in the database*, not what an entity in memory happens to hold.
+
+4. **`EnsureCreated()`** creates the schema *and applies the `HasData` seed*. So every test starts
    from the same 12 products and coin inventory the real application starts from. Tests reference `A3`
    knowing it's out of stock and `D2` knowing it costs 75¢, rather than building fixtures by hand.
+
+**Why SQLite rather than EF Core's in-memory provider.** The in-memory provider isn't a relational
+database at all — it's a dictionary of objects behind the EF API. It has no real transactions, so
+`BeginTransactionAsync` is silently a no-op (EF warns, and the tests used to have to suppress
+`TransactionIgnoredWarning`). Any test claiming to prove the purchase is atomic would have proved
+nothing. SQLite is a real engine: it enforces constraints, generates keys, executes actual SQL, and
+commits or rolls back for real — while still being a throwaway database created in milliseconds with
+no server to install.
+
+It is not a perfect stand-in for SQL Server (the dialects differ in places — `nvarchar` sizing,
+collation, default case-sensitivity), so it raises fidelity rather than guaranteeing it. For the
+behaviour these tests care about, that is a large step up for no setup cost.
+
+### Proving the purchase is atomic
+
+With a real transaction available, the commit phase's all-or-nothing property can be tested rather
+than argued for. The trick is to fail *after* the writes have reached the database but *before* the
+transaction commits, which a `DbContext` subclass does in one override:
+
+```csharp
+private sealed class FailAfterWritingDbContext(DbContextOptions<VendingMachineDbContext> options)
+    : VendingMachineDbContext(options)
+{
+    public override async Task<int> SaveChangesAsync(
+        bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        var written = await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+        throw new SimulatedCrashException($"simulated failure after writing {written} rows");
+    }
+}
+```
+
+`base.SaveChangesAsync` really does issue the `UPDATE`s — the stock decrement *and* the coin
+inventory adjustment — inside the explicit transaction. Then it throws, `CommitAsync` is never
+reached, and `await using` disposes the transaction, which rolls it back. The test then re-reads
+through a fresh context and finds `D2` still at quantity 25, dollars still at 15 and quarters still
+at 40: neither write survived, not one of the two.
+
+That is the assertion that would catch the realistic bug — one write committed and the other lost,
+leaving the machine's books wrong.
 
 ### What the tests actually pin down
 
@@ -1650,11 +1707,17 @@ one.
 
 Worth stating plainly:
 
-- **Controllers.** Status-code mapping is a `switch` with no branching logic worth defending;
-  integration tests via `WebApplicationFactory` would be the tool if it grew.
-- **Real transaction rollback**, per the in-memory limitation above.
+- **Controllers.** `ProductsController` is covered (it has a rule worth pinning — the stock flags);
+  the others aren't. `PurchaseController`'s status-code mapping is a `switch` with no branching logic
+  worth defending, and `MachineController` only forwards to the state service. Integration tests via
+  `WebApplicationFactory` would be the tool if either grew.
+- **The HTTP layer itself** — routing, JSON serialisation, the `JsonStringEnumConverter` the front
+  end's contract depends on. Nothing fails at build time if that registration is removed.
 - **Concurrency.** `MachineStateService`'s locking is reasoned about, not exercised by a
-  multi-threaded test.
+  multi-threaded test. Nor is the concurrent-purchase race described in exercise 6.
+- **SQL Server specifically.** The tests run against SQLite, so a failure that only shows up in
+  T-SQL — a dialect difference, a collation, a migration that applies differently — would slip
+  through.
 
 Knowing what your suite *doesn't* cover is as useful as knowing what it does.
 
@@ -1771,10 +1834,14 @@ Roughly increasing in difficulty. Each touches a different layer.
 
 4. **Write a failing test first.** Assert that inserting a coin then returning it leaves the coin
    inventory unchanged (returned coins are the customer's, never banked). Make it pass.
+   *(Worked: `ReturnCoins_AfterInsertingCoins_LeavesThePersistedCoinInventoryUnchanged`. Worth
+   knowing that it passed on the first run — the return path never touches the database — so it
+   stands as a regression guard rather than a bug fix. A test that passes immediately is a result,
+   not a failure to manufacture one.)*
 
 5. **Replace the in-memory test provider with SQLite in-memory**, which supports real transactions.
-   Write a test proving a failure mid-purchase rolls back both writes — closing the gap
-   [section 11](#what-isnt-tested) admits to.
+   Write a test proving a failure mid-purchase rolls back both writes.
+   *(Worked: see [section 11](#proving-the-purchase-is-atomic).)*
 
 6. **Add optimistic concurrency.** Give `Product` a `[Timestamp]` row version and handle
    `DbUpdateConcurrencyException` for two simultaneous purchases of the last item. This is the real

@@ -1,8 +1,9 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { SoundService } from '../../../core/services/sound.service';
 import { VendingMachine } from './vending-machine';
 
 /** What ASP.NET answers with when the request body fails model validation. */
@@ -70,6 +71,41 @@ describe('VendingMachine', () => {
     await fixture.whenStable();
 
     expect(messageText()).toBe('Insufficient funds - insert $1.25 more.');
+  });
+
+  it('pitches the coin return by the total coins returned, not the denominations', async () => {
+    const coinReturn = vi.spyOn(TestBed.inject(SoundService), 'coinReturn');
+
+    component.onReturnCoins();
+    http.expectOne((r) => r.url.endsWith('/machine/coins/return')).flush({
+      returnedCents: 65,
+      returnedCoins: [
+        { denomination: 'Quarter', count: 2 },
+        { denomination: 'Dime', count: 1 },
+        { denomination: 'Nickel', count: 1 },
+      ],
+    });
+    await fixture.whenStable();
+
+    // Three groups, four coins.
+    expect(coinReturn).toHaveBeenCalledWith(4);
+    expect(messageText()).toBe('Returned $0.65.');
+  });
+
+  it('buzzes instead of clattering when there is nothing to return', async () => {
+    const sound = TestBed.inject(SoundService);
+    const coinReturn = vi.spyOn(sound, 'coinReturn');
+    const reject = vi.spyOn(sound, 'reject');
+
+    component.onReturnCoins();
+    http
+      .expectOne((r) => r.url.endsWith('/machine/coins/return'))
+      .flush({ returnedCents: 0, returnedCoins: [] });
+    await fixture.whenStable();
+
+    expect(coinReturn).not.toHaveBeenCalled();
+    expect(reject).toHaveBeenCalled();
+    expect(messageText()).toBe('No coins to return.');
   });
 
   it('shows the generic message when the error body is not a purchase result', async () => {

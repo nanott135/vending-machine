@@ -1,27 +1,20 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using VendingMachine.Api.Controllers;
 using VendingMachine.Api.Data;
 using VendingMachine.Api.Dtos;
 
 namespace VendingMachine.Api.Tests;
 
-public class ProductsControllerTests
+// Same approach as VendingMachineServiceTests: a per-test SQLite in-memory database carrying the
+// real HasData seed, so these assertions are about the seeded catalogue, not a hand-rolled fixture.
+public class ProductsControllerTests : IDisposable
 {
-    // Same approach as VendingMachineServiceTests: an isolated in-memory store carrying the real
-    // HasData seed, so these assertions are about the seeded catalogue, not a hand-rolled fixture.
-    private static VendingMachineDbContext CreateContext()
-    {
-        var options = new DbContextOptionsBuilder<VendingMachineDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString())
-            .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
-            .Options;
+    private readonly TestDatabase _database = new();
 
-        var context = new VendingMachineDbContext(options);
-        context.Database.EnsureCreated();
-        return context;
-    }
+    private VendingMachineDbContext CreateContext() => _database.CreateContext();
+
+    public void Dispose() => _database.Dispose();
 
     private static async Task<IReadOnlyList<ProductDto>> GetProductsAsync(VendingMachineDbContext context)
     {

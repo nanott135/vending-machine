@@ -454,7 +454,7 @@ the literal string.
 `[class.x]` toggles a single class on a boolean — the idiomatic way to drive conditional styling.
 
 ```html
-<button [attr.aria-pressed]="muted()" [disabled]="entry().length !== 2">
+<button [attr.aria-pressed]="muted()" [disabled]="!canSubmit()">
 ```
 
 `[attr.x]` sets an **HTML attribute** rather than a DOM property, needed for things like ARIA where
@@ -932,9 +932,24 @@ may already be non-zero — the user might have reloaded the page mid-transactio
 ```typescript
 export class Keypad {
   private readonly sound = inject(SoundService);
+
+  readonly products = input.required<Product[]>();
+  readonly balanceCents = input.required<number>();
+
   readonly selectCode = output<string>();
 
   protected readonly entry = signal('');
+
+  private readonly selectedProduct = computed(
+    () => this.products().find((product) => product.code === this.entry()) ?? null,
+  );
+
+  protected readonly tooExpensive = computed(() => {
+    const product = this.selectedProduct();
+    return !!product && !product.isOutOfStock && product.priceCents > this.balanceCents();
+  });
+
+  protected readonly canSubmit = computed(() => this.entry().length === 2 && !this.tooExpensive());
 
   press(key: string): void {
     if (this.entry().length < 2) {
@@ -949,7 +964,7 @@ export class Keypad {
   }
 
   submit(): void {
-    if (this.entry().length !== 2) {
+    if (!this.canSubmit()) {
       return;
     }
     this.sound.keyPress();
@@ -967,10 +982,45 @@ feedback: nothing happened, so nothing should be heard.
 
 Note the sound plays on the click rather than after a round trip, so the keypad feels instant.
 
+### Where affordability lives, and why here
+
+Disabling `Select` when the balance is too low needs two facts that start in different places: the
+**code being typed**, which only the keypad knows, and the **price and balance**, which the container
+owns. Something has to move, and the direction is the interesting part.
+
+Pushing `entry` *up* — emitting every keystroke so the container can hold the draft code — would work
+and is the wrong way round. The half-typed code is genuinely local state; nothing above the keypad
+cares about `"C"` on its way to `"C3"`, and lifting it means the container re-renders on every
+keypress to track something it has no use for.
+
+So the data comes *down* instead. `products` and `balanceCents` arrive as inputs, and because inputs
+are signals, `canSubmit` is an ordinary `computed` over them and the local `entry`. The keypad reads
+the container's state without the container learning anything about the keypad's.
+
+Note what is *not* disabled, which was a deliberate call:
+
+| Entry | Select | Why |
+|---|---|---|
+| Fewer than 2 characters | disabled | Nothing to price yet |
+| Unknown code | **enabled** | "Unknown product code. Try again." beats a button that won't move |
+| Out of stock | **enabled** | "Root Beer is out of stock." names the real reason, even if the balance is also short |
+| Real, in stock, too expensive | disabled | The only case the client can answer with certainty |
+
+The rule underneath: **disable only when the client already knows the answer and the server would
+merely repeat it.** For everything else the machine's message carries more information than a dead
+control does — and a button that silently refuses is the worst of both, since the user gets no
+message at all. That is also why `tooExpensive` explicitly excludes out-of-stock products rather than
+letting an affordability check mask a stocking problem.
+
+There is one non-obvious benefit to keeping unknown codes enabled: before `getProducts()` resolves,
+`products()` is `[]`, so *every* code looks unknown. Disabling on "no matching product" would leave
+the keypad dead during the initial load.
+
 ### The purchase flow, end to end
 
 1. User clicks `C`, then `3`. `Keypad.entry` becomes `"C3"`; `Select` enables via
-   `[disabled]="entry().length !== 2"`.
+   `[disabled]="!canSubmit()"`, which needs two characters *and* a balance covering the price — see
+   [above](#where-affordability-lives-and-why-here).
 2. `Select` emits `selectCode` with `"C3"`.
 3. `VendingMachine.onSelectCode('C3')` calls `MachineService.purchase('C3')`.
 4. `HttpClient` POSTs `{"productCode":"C3"}` to `/api/purchase`.
@@ -1961,6 +2011,9 @@ Roughly increasing in difficulty.
 
 2. **Disable the buy button when the balance is too low.** Compute affordability with `computed` and
    bind it. Notice you need the price *and* the balance — which one lives where?
+   *(Worked: see [section 9](#where-affordability-lives-and-why-here). The answer to "which one
+   lives where" turned out to matter less than deciding which failures are worth disabling for at
+   all.)*
 
 3. **Highlight the selected slot.** As the user types `C` then `3`, tint the matching tile. This
    needs keypad state to reach `ProductGrid`, so it's a real exercise in data flow: does the entry
@@ -1968,6 +2021,9 @@ Roughly increasing in difficulty.
 
 4. **Add a sound for the coin return.** One exists; make the pitch descend across the returned coins
    so returning four sounds different from returning one.
+   *(Worked: `coinReturn(coinCount)` sweeps the range and plays one clink per coin. Note the count
+   has to come from the API's `returnedCoins` — the container was reading `.length`, which counts
+   denomination *groups*, not coins.)*
 
 5. **Write an HTTP test.** Use `HttpTestingController` to assert `MachineService.purchase()` POSTs to
    the right URL with the right body, and to simulate a 402 so the container's error branch is

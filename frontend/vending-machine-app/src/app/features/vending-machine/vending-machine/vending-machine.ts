@@ -100,15 +100,18 @@ export class VendingMachine implements OnInit {
   onReturnCoins(): void {
     this.machineService.returnCoins().subscribe((result) => {
       this.balanceCents.set(0);
-      const hasCoins = result.returnedCoins.length > 0;
+      // Coins come back grouped by denomination, so the cascade wants the total across the groups.
+      const coinCount = result.returnedCoins.reduce((total, coin) => total + coin.count, 0);
       // Only clatter when coins actually drop; an empty tray gets the reject buzz instead.
-      if (hasCoins) {
-        this.sound.coinReturn();
+      if (coinCount > 0) {
+        this.sound.coinReturn(coinCount);
       } else {
         this.sound.reject();
       }
       this.message.set(
-        hasCoins ? `Returned $${(result.returnedCents / 100).toFixed(2)}.` : 'No coins to return.',
+        coinCount > 0
+          ? `Returned $${(result.returnedCents / 100).toFixed(2)}.`
+          : 'No coins to return.',
       );
     });
   }
