@@ -10,8 +10,15 @@
     }
   </div>
 
+  <!-- Always rendered, so enabling and disabling Select never reflows the console. -->
+  <p class="keypad__hint" aria-live="polite">
+    @if (tooExpensive()) {
+      Insert {{ shortfallCents() / 100 | currency }} more
+    }
+  </p>
+
   <div class="keypad__actions">
     <button type="button" (click)="clear()">Clear</button>
-    <button type="button" (click)="submit()" [disabled]="entry().length !== 2">Select</button>
+    <button type="button" (click)="submit()" [disabled]="!canSubmit()">Select</button>
   </div>
 </div>
