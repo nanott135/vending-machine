@@ -139,6 +139,20 @@ drift, opacity-only fade on the same schedule). Keep new motion behind the same 
 
 - Never commit secrets.
 
+### Dev agents
+
+Implementation work is split along the stack seam by two project agents in `.claude/agents/`:
+`frontend-dev` owns `frontend/vending-machine-app/`, `backend-dev` owns `backend/`. Neither may edit
+the other's tree, and **neither runs git** — the orchestrating session owns branching, diff review,
+commits and the PR, so the review rules below still apply.
+
+Each agent verifies its own stack before reporting (`npm test` / `npm run build`;
+`dotnet build` / `dotnet test`). End-to-end checks stay with the orchestrator via the `run-stack`
+skill — two agents would contend for ports 5022 and 4200.
+
+For cross-stack work, settle the API contract first and hand it to both agents; run `backend-dev`
+first whenever the front end consumes a new or changed contract.
+
 ### Git workflow
 
 - Never commit directly to `main`.
