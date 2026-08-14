@@ -9,12 +9,13 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import { CoinDenomination } from '../../../core/models/coin.model';
+import { CoinCount, CoinDenomination } from '../../../core/models/coin.model';
 import { Product } from '../../../core/models/product.model';
 import { PurchaseResult, isPurchaseResult } from '../../../core/models/purchase-result.model';
 import { MachineService } from '../../../core/services/machine.service';
 import { ProductService } from '../../../core/services/product.service';
 import { SoundService } from '../../../core/services/sound.service';
+import { CoinInventory } from '../coin-inventory/coin-inventory';
 import { CoinSlot } from '../coin-slot/coin-slot';
 import { DispensedItem, DispenserBin } from '../dispenser-bin/dispenser-bin';
 import { Keypad } from '../keypad/keypad';
@@ -41,7 +42,7 @@ function fitScale(element: HTMLElement): number {
 
 @Component({
   selector: 'app-vending-machine',
-  imports: [ProductGrid, CoinSlot, Keypad, DispenserBin],
+  imports: [ProductGrid, CoinSlot, Keypad, DispenserBin, CoinInventory],
   templateUrl: './vending-machine.html',
   styleUrl: './vending-machine.scss',
 })
@@ -55,6 +56,8 @@ export class VendingMachine implements OnInit {
   protected readonly message = signal<string | null>(null);
   protected readonly muted = this.sound.muted;
   protected readonly dispensed = signal<DispensedItem | null>(null);
+  protected readonly inventoryCoins = signal<CoinCount[]>([]);
+  protected readonly inventoryTotalCents = signal(0);
 
   private dispenseCount = 0;
 
@@ -89,6 +92,7 @@ export class VendingMachine implements OnInit {
   ngOnInit(): void {
     this.refreshProducts();
     this.refreshBalance();
+    this.refreshInventory();
   }
 
   onInsertCoin(denomination: CoinDenomination): void {
@@ -149,6 +153,9 @@ export class VendingMachine implements OnInit {
           : '';
         this.message.set(`Dispensed ${result.product?.name}.${changeText}`);
         this.refreshProducts();
+        // A sale is the only thing that moves the coin bank - it keeps the inserted coins and
+        // pays change out of them. Inserting and returning coins leave the durable inventory alone.
+        this.refreshInventory();
         break;
       }
       case 'ProductNotFound':
@@ -171,6 +178,13 @@ export class VendingMachine implements OnInit {
 
   private refreshProducts(): void {
     this.productService.getProducts().subscribe((products) => this.products.set(products));
+  }
+
+  private refreshInventory(): void {
+    this.machineService.getInventory().subscribe((inventory) => {
+      this.inventoryCoins.set(inventory.coins);
+      this.inventoryTotalCents.set(inventory.totalCents);
+    });
   }
 
   private refreshBalance(): void {

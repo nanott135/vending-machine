@@ -1,0 +1,75 @@
+/* Compact secondary readout - it sits under the dispenser bin and must not crowd the
+   primary controls, so it stays to a single coin row plus a total line. */
+.coin-inventory {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.4rem 0.5rem 0.45rem;
+  border: 3px solid var(--charcoal);
+  border-radius: 10px;
+  background: linear-gradient(180deg, #fffdf7 0%, var(--cream-deep) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+}
+
+.coin-inventory__heading {
+  margin: 0;
+  font-family: var(--readout);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  text-align: center;
+  color: var(--charcoal);
+}
+
+.coin-inventory__list {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.coin-inventory__row {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+}
+
+.coin-inventory__coin {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+}
+
+.coin-inventory__count {
+  font-family: var(--readout);
+  font-weight: 700;
+  font-size: 0.66rem;
+  color: var(--charcoal);
+}
+
+.coin-inventory__total {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0.2rem 0.4rem;
+  border-radius: 5px;
+  border: 2px solid #14141a;
+  background: var(--charcoal);
+  box-shadow: inset 0 0 8px rgba(78, 195, 199, 0.35);
+  font-family: var(--readout);
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--turquoise);
+}
+
+.coin-inventory__total-label {
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}

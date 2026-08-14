@@ -13,6 +13,16 @@ const VALIDATION_PROBLEM = {
   errors: { ProductCode: ['The ProductCode field is required.'] },
 };
 
+const EMPTY_INVENTORY = {
+  coins: [
+    { denomination: 'Dollar', count: 0 },
+    { denomination: 'Quarter', count: 0 },
+    { denomination: 'Dime', count: 0 },
+    { denomination: 'Nickel', count: 0 },
+  ],
+  totalCents: 0,
+};
+
 describe('VendingMachine', () => {
   let component: VendingMachine;
   let fixture: ComponentFixture<VendingMachine>;
@@ -32,9 +42,11 @@ describe('VendingMachine', () => {
     http = TestBed.inject(HttpTestingController);
     await fixture.whenStable();
 
-    // ngOnInit loads products and the balance; answer both so each test starts settled.
+    // ngOnInit loads products, the balance and the coin inventory; answer all three so each
+    // test starts settled.
     http.expectOne((r) => r.url.endsWith('/products')).flush([]);
     http.expectOne((r) => r.url.endsWith('/machine/balance')).flush({ balanceCents: 0 });
+    http.expectOne((r) => r.url.endsWith('/machine/inventory')).flush(EMPTY_INVENTORY);
     await fixture.whenStable();
   });
 
@@ -70,6 +82,43 @@ describe('VendingMachine', () => {
     await fixture.whenStable();
 
     expect(messageText()).toBe('Insufficient funds - insert $1.25 more.');
+  });
+
+  it('re-reads the coin inventory after a successful purchase', async () => {
+    component.onSelectCode('A1');
+
+    http.expectOne((r) => r.url.endsWith('/purchase')).flush({
+      status: 'Success',
+      product: {
+        code: 'A1',
+        name: 'Cola',
+        priceCents: 125,
+        quantity: 9,
+        isOutOfStock: false,
+        isLowStock: false,
+        slotOrder: 1,
+      },
+      changeDueCents: 0,
+      changeBreakdown: null,
+      amountStillNeededCents: 0,
+    });
+
+    // A sale banks the inserted coins, so the container refetches the durable inventory.
+    http.expectOne((r) => r.url.endsWith('/products')).flush([]);
+    http.expectOne((r) => r.url.endsWith('/machine/inventory')).flush({
+      coins: [
+        { denomination: 'Dollar', count: 16 },
+        { denomination: 'Quarter', count: 41 },
+        { denomination: 'Dime', count: 0 },
+        { denomination: 'Nickel', count: 3 },
+      ],
+      totalCents: 2655,
+    });
+    http.expectOne((r) => r.url.endsWith('/machine/balance')).flush({ balanceCents: 0 });
+    await fixture.whenStable();
+
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('.coin-inventory__total-value')?.textContent).toContain('26.55');
   });
 
   it('shows the generic message when the error body is not a purchase result', async () => {
