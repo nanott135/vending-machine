@@ -30,6 +30,11 @@
           }
 
           <app-dispenser-bin [item]="dispensed()" />
+
+          <app-coin-inventory
+            [coins]="inventoryCoins()"
+            [totalCents]="inventoryTotalCents()"
+          />
         </div>
       </div>
     </div>

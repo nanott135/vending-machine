@@ -1,0 +1,17 @@
+<section class="coin-inventory" aria-labelledby="coin-inventory-heading">
+  <h2 class="coin-inventory__heading" id="coin-inventory-heading">Coins in Machine</h2>
+
+  <ul class="coin-inventory__list">
+    @for (coin of coins(); track coin.denomination) {
+      <li class="coin-inventory__row">
+        <img class="coin-inventory__coin" [src]="imageFor(coin)" [alt]="coin.denomination" />
+        <span class="coin-inventory__count">{{ coin.count }}</span>
+      </li>
+    }
+  </ul>
+
+  <p class="coin-inventory__total">
+    <span class="coin-inventory__total-label">Total</span>
+    <span class="coin-inventory__total-value">{{ totalCents() / 100 | currency }}</span>
+  </p>
+</section>
