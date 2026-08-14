@@ -20,7 +20,7 @@ public class VendingMachineService(
 
         if (product.Quantity <= 0)
         {
-            return new PurchaseResult(PurchaseStatus.OutOfStock, ToDto(product));
+            return new PurchaseResult(PurchaseStatus.OutOfStock, ProductDto.FromProduct(product));
         }
 
         var balanceCents = machineState.BalanceCents;
@@ -28,7 +28,7 @@ public class VendingMachineService(
         {
             return new PurchaseResult(
                 PurchaseStatus.InsufficientFunds,
-                ToDto(product),
+                ProductDto.FromProduct(product),
                 AmountStillNeededCents: product.PriceCents - balanceCents);
         }
 
@@ -45,7 +45,7 @@ public class VendingMachineService(
         var changeCoins = changeMakingService.MakeChange(changeDueCents, availableForChange);
         if (changeCoins is null)
         {
-            return new PurchaseResult(PurchaseStatus.ChangeUnavailable, ToDto(product), changeDueCents);
+            return new PurchaseResult(PurchaseStatus.ChangeUnavailable, ProductDto.FromProduct(product), changeDueCents);
         }
 
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
@@ -72,9 +72,6 @@ public class VendingMachineService(
             .OrderByDescending(c => (int)c.Denomination)
             .ToList();
 
-        return new PurchaseResult(PurchaseStatus.Success, ToDto(product), changeDueCents, changeBreakdown);
+        return new PurchaseResult(PurchaseStatus.Success, ProductDto.FromProduct(product), changeDueCents, changeBreakdown);
     }
-
-    private static ProductDto ToDto(Product product) =>
-        new(product.Code, product.Name, product.PriceCents, product.Quantity, product.Quantity == 0, product.SlotOrder);
 }

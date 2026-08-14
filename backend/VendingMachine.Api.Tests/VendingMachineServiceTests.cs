@@ -48,6 +48,46 @@ public class VendingMachineServiceTests
 
         Assert.Equal(PurchaseStatus.OutOfStock, result.Status);
         Assert.Equal(0, result.Product!.Quantity);
+        Assert.True(result.Product.IsOutOfStock);
+        Assert.False(result.Product.IsLowStock); // out of stock is not also "running low"
+    }
+
+    [Fact]
+    public async Task PurchaseAsync_DroppingIntoTheLowStockBand_FlagsTheProductAsLowStock()
+    {
+        await using var context = CreateContext();
+        var machineState = new MachineStateService();
+        var sut = new VendingMachineService(context, machineState, new ChangeMakingService());
+
+        // B1 (Orange Soda) is seeded at 150 cents, quantity 6 - one above the threshold.
+        machineState.InsertCoin(CoinDenomination.Dollar);
+        machineState.InsertCoin(CoinDenomination.Dollar);
+
+        var result = await sut.PurchaseAsync("B1");
+
+        Assert.Equal(PurchaseStatus.Success, result.Status);
+        Assert.Equal(5, result.Product!.Quantity);
+        Assert.False(result.Product.IsOutOfStock);
+        Assert.True(result.Product.IsLowStock);
+    }
+
+    [Fact]
+    public async Task PurchaseAsync_AboveTheLowStockThreshold_LeavesBothStockFlagsClear()
+    {
+        await using var context = CreateContext();
+        var machineState = new MachineStateService();
+        var sut = new VendingMachineService(context, machineState, new ChangeMakingService());
+
+        // C1 (Chips) is seeded at 175 cents, quantity 7 -> 6 after this sale.
+        machineState.InsertCoin(CoinDenomination.Dollar);
+        machineState.InsertCoin(CoinDenomination.Dollar);
+
+        var result = await sut.PurchaseAsync("C1");
+
+        Assert.Equal(PurchaseStatus.Success, result.Status);
+        Assert.Equal(6, result.Product!.Quantity);
+        Assert.False(result.Product.IsOutOfStock);
+        Assert.False(result.Product.IsLowStock);
     }
 
     [Fact]
