@@ -169,3 +169,7 @@ first whenever the front end consumes a new or changed contract.
   multi-commit branch (a branch whose second commit replaces the first
   gets titled after the work that was thrown away). Pass an explicit
   `--title`/`--body` in that case.
+- Don't pass `--delete-branch` while another open PR targets that branch —
+  deleting the base closes the dependent PR outright rather than
+  retargeting it, and reopening it requires pushing the base ref back
+  first. Retarget the dependent PR before merging its base.
