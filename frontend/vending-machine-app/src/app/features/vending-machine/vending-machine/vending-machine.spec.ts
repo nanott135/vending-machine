@@ -56,6 +56,7 @@ describe('VendingMachine', () => {
           priceCents: 125,
           quantity: 10,
           isOutOfStock: false,
+          isLowStock: false,
           slotOrder: 1,
         },
         changeDueCents: 0,

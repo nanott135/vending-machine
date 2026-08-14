@@ -9,6 +9,7 @@ const candyBar: Product = {
   priceCents: 125,
   quantity: 18,
   isOutOfStock: false,
+  isLowStock: false,
   slotOrder: 9,
 };
 

@@ -1,5 +1,8 @@
 <div class="slot" [class.out-of-stock]="product().isOutOfStock">
   <div class="slot__status">
+    @if (product().isLowStock) {
+      <span class="slot__badge" role="img" aria-label="Low stock">Low</span>
+    }
     <span
       class="slot__light"
       [class.lit]="product().isOutOfStock"

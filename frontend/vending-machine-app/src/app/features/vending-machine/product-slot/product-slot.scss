@@ -34,6 +34,35 @@
   top: 0.35rem;
   right: 0.35rem;
   z-index: 1;
+  /*
+   * A row, not a stack: isLowStock and isOutOfStock are mutually exclusive server-side, so the
+   * badge and a lit light never appear together - but laying them out side by side means bad
+   * data would read as two indicators rather than one on top of the other.
+   */
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+/*
+ * Stamped mustard placard, sized to the same 10px register as the light beside it so it survives
+ * the fit-to-viewport scaler.
+ */
+.slot__badge {
+  font-family: var(--readout);
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  padding: 0.15rem 0.28rem 0.15rem 0.38rem;
+  color: var(--charcoal);
+  background: var(--mustard);
+  border: 1px solid var(--charcoal);
+  border-radius: 3px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.6),
+    0 1px 2px rgba(43, 43, 46, 0.35);
 }
 
 .slot__light {

@@ -4,5 +4,6 @@ export interface Product {
   priceCents: number;
   quantity: number;
   isOutOfStock: boolean;
+  isLowStock: boolean;
   slotOrder: number;
 }
